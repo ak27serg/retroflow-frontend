@@ -1,0 +1,96 @@
+
+> retroflow-frontend@0.1.0 dev
+> next dev --turbopack -p 3003
+
+ ⚠ Warning: Found multiple lockfiles. Selecting /Users/sergiimatushchenko/package-lock.json.
+   Consider removing the lockfiles at:
+   * /Users/sergiimatushchenko/projects/claude/vibe_test/retroflow-frontend/package-lock.json
+
+   ▲ Next.js 15.4.6 (Turbopack)
+   - Local:        http://localhost:3003
+   - Network:      http://192.168.1.162:3003
+   - Environments: .env.local
+
+ ✓ Starting...
+ ✓ Ready in 1188ms
+ ○ Compiling / ...
+ ✓ Compiled / in 2.6s
+ HEAD / 200 in 2945ms
+ GET / 200 in 114ms
+ ✓ Compiled /favicon.ico in 188ms
+ GET /favicon.ico?favicon.45db1c09.ico 200 in 479ms
+ ✓ Compiled /session/[sessionId] in 416ms
+ GET /session/7937edd2-d948-4a54-89e7-e5204039a1f7 200 in 1030ms
+ ✓ Compiled in 76ms
+ ✓ Compiled in 103ms
+ GET / 200 in 317ms
+ GET /favicon.ico?favicon.45db1c09.ico 200 in 238ms
+ GET /session/71b1de51-4180-45b5-80cc-c2a9eb018db1 200 in 134ms
+ ✓ Compiled in 61ms
+ GET / 200 in 82ms
+ GET /favicon.ico?favicon.45db1c09.ico 200 in 248ms
+ GET /session/d13c3201-c570-4fbc-8d07-f0b86531f581 200 in 119ms
+ ✓ Compiled in 59ms
+ GET /session/393065fe-b11b-4d77-b3e7-3203457f48a4 200 in 127ms
+ ✓ Compiled in 66ms
+ ✓ Compiled in 70ms
+ ✓ Compiled in 64ms
+ GET / 200 in 101ms
+ GET /session/9ee2b03e-4f2a-4398-a44e-dcf04b49e5e3 200 in 126ms
+ ✓ Compiled in 64ms
+ ✓ Compiled in 63ms
+ GET / 200 in 90ms
+ GET /session/68cfa93d-5909-4ab7-bdbe-1320e7e07d5b 200 in 129ms
+ ✓ Compiled in 55ms
+ ✓ Compiled in 55ms
+ ✓ Compiled in 56ms
+ ✓ Compiled in 55ms
+ ✓ Compiled in 63ms
+ GET / 200 in 106ms
+ GET /session/ffe5160f-e1cb-4f63-a65f-94cd255d981e 200 in 124ms
+ ✓ Compiled in 72ms
+ ✓ Compiled in 66ms
+ ✓ Compiled in 73ms
+ ✓ Compiled in 63ms
+ ✓ Compiled in 54ms
+ ✓ Compiled in 75ms
+ ✓ Compiled in 75ms
+ ✓ Compiled in 62ms
+ ⨯ ./src/components/phases/GroupingPhase.tsx:304:9
+Ecmascript file had an error
+[0m [90m 302 |[39m   }[33m;[39m
+ [90m 303 |[39m
+[31m[1m>[22m[39m[90m 304 |[39m   [36mconst[39m handleDragStart [33m=[39m (event[33m:[39m [33mDragStartEvent[39m) [33m=>[39m {
+ [90m     |[39m         [31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m[31m[1m^[22m[39m
+ [90m 305 |[39m     [36mconst[39m { active } [33m=[39m event[33m;[39m
+ [90m 306 |[39m     setActiveId(active[33m.[39mid [36mas[39m string)[33m;[39m
+ [90m 307 |[39m     [0m
+
+the name `handleDragStart` is defined multiple times
+
+Import traces:
+  Client Component Browser:
+    ./src/components/phases/GroupingPhase.tsx [Client Component Browser]
+    ./src/app/session/[sessionId]/page.tsx [Client Component Browser]
+    ./src/app/session/[sessionId]/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/components/phases/GroupingPhase.tsx [Client Component SSR]
+    ./src/app/session/[sessionId]/page.tsx [Client Component SSR]
+    ./src/app/session/[sessionId]/page.tsx [Server Component]
+
+
+ ○ Compiling /_error ...
+ ✓ Compiled /_error in 1099ms
+ GET /session/ffe5160f-e1cb-4f63-a65f-94cd255d981e 500 in 1337ms
+ GET /favicon.ico 500 in 36ms
+ GET / 200 in 107ms
+ ✓ Compiled in 67ms
+ GET / 200 in 128ms
+ GET /favicon.ico?favicon.45db1c09.ico 200 in 251ms
+ ✓ Compiled /session/[sessionId] in 18ms
+ GET /session/85a3ec88-8d5f-482c-8a82-11de7f7a57fe 200 in 153ms
+   Reload env: .env.local
+ ✓ Compiled in 11ms
+ GET /session/85a3ec88-8d5f-482c-8a82-11de7f7a57fe 200 in 121ms
+[?25h
