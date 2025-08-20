@@ -110,8 +110,8 @@ export default function JoinSession() {
                 ...prev, 
                 inviteCode: e.target.value.toUpperCase() 
               }))}
-              placeholder="Enter 8-character code"
-              maxLength={8}
+              placeholder="Enter 4-character code"
+              maxLength={4}
               className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent uppercase tracking-widest text-center font-mono text-lg text-gray-900 placeholder-gray-500"
               required
             />
