@@ -5,8 +5,8 @@ import { useRouter } from 'next/navigation';
 import { apiService } from '@/lib/api';
 
 const AVATAR_OPTIONS = [
-  '👨‍💻', '👩‍💻', '👨‍🎨', '👩‍🎨', '👨‍🏫', '👩‍🏫', '👨‍💼', '👩‍💼',
-  '🧑‍🚀', '👨‍🔧', '👩‍🔧', '👨‍⚕️', '👩‍⚕️', '👨‍🍳', '👩‍🍳', '🧑‍🎤'
+  '🦸‍♂️', '🦸‍♀️', '🧙‍♂️', '🧙‍♀️', '🦹‍♂️', '🦹‍♀️', '🤖', '👽',
+  '🧛‍♂️', '🧛‍♀️', '🧚‍♂️', '🧚‍♀️', '🦄', '🐉', '👻', '🎭'
 ];
 
 export default function JoinSession() {
@@ -15,7 +15,7 @@ export default function JoinSession() {
   const [formData, setFormData] = useState({
     inviteCode: '',
     displayName: '',
-    avatarId: '👩‍💻'
+    avatarId: '🦸‍♀️'
   });
   const [sessionInfo, setSessionInfo] = useState<{
     id?: string;
