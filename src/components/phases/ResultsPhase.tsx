@@ -309,33 +309,35 @@ export default function ResultsPhase({ session, participant }: ResultsPhaseProps
           </div>
         </div>
 
-        {/* Action buttons */}
-        <div className="flex justify-center gap-4 mb-4">
-          <button
-            onClick={startPresentation}
-            className="bg-indigo-600 text-white px-6 py-3 rounded-lg hover:bg-indigo-700 font-semibold"
-          >
-            📽️ Start Presentation
-          </button>
-          <button
-            onClick={() => setShowActionItems(!showActionItems)}
-            className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 font-semibold"
-          >
-            {showActionItems ? 'Hide' : 'Show'} Action Items
-          </button>
-          <button
-            onClick={exportResults}
-            className="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 font-semibold"
-          >
-            Export Results
-          </button>
-          <button
-            onClick={startNewRetro}
-            className="bg-purple-600 text-white px-6 py-3 rounded-lg hover:bg-purple-700 font-semibold"
-          >
-            New Retro
-          </button>
-        </div>
+        {/* Action buttons - Host only */}
+        {participant.isHost && (
+          <div className="flex justify-center gap-4 mb-4">
+            <button
+              onClick={startPresentation}
+              className="bg-indigo-600 text-white px-6 py-3 rounded-lg hover:bg-indigo-700 font-semibold"
+            >
+              📽️ Start Presentation
+            </button>
+            <button
+              onClick={() => setShowActionItems(!showActionItems)}
+              className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 font-semibold"
+            >
+              {showActionItems ? 'Hide' : 'Show'} Action Items
+            </button>
+            <button
+              onClick={exportResults}
+              className="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 font-semibold"
+            >
+              Export Results
+            </button>
+            <button
+              onClick={startNewRetro}
+              className="bg-purple-600 text-white px-6 py-3 rounded-lg hover:bg-purple-700 font-semibold"
+            >
+              New Retro
+            </button>
+          </div>
+        )}
 
         {/* Host navigation */}
         {participant.isHost && (
