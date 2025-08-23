@@ -268,6 +268,12 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
     };
 
     const handleGroupCreated = (group: Group) => {
+      console.log('Group created:', {
+        groupId: group.id?.slice(-4),
+        label: group.label,
+        color: group.color,
+        responseCount: group.responses?.length || 0
+      });
       setGroups(prev => [...prev, group]);
       
       // Update responses that were assigned to this group
@@ -275,6 +281,7 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
         setResponses(prev => prev.map(response => {
           const groupResponse = group.responses?.find(gr => gr.id === response.id);
           if (groupResponse) {
+            console.log('Updating response to group:', response.id.slice(-4), '→', group.id?.slice(-4));
             return { ...response, groupId: group.id };
           }
           return response;
@@ -568,9 +575,11 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
           // Keep cards exactly where they are - don't move them when grouping
           setResponses(prev => prev.map(r => {
             if (r.id === responseId) {
+              console.log('Setting dragged card to pending group:', r.id.slice(-4));
               return { ...r, positionX: newX, positionY: newY, groupId: 'pending' };
             }
             if (r.id === overlappingCard.id) {
+              console.log('Setting target card to pending group:', r.id.slice(-4));
               return { ...r, groupId: 'pending' };
             }
             return r;
@@ -634,7 +643,18 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
     totalResponses: responses.length,
     ungroupedResponses: ungroupedResponses.length,
     groups: groups.length,
-    sessionResponses: session.responses?.length || 0
+    sessionResponses: session.responses?.length || 0,
+    responsesWithGroups: responses.filter(r => r.groupId).map(r => ({
+      id: r.id.slice(-4),
+      groupId: r.groupId === 'pending' ? 'PENDING' : r.groupId?.slice(-4),
+      content: r.content.slice(0, 20)
+    })),
+    pendingResponses: responses.filter(r => r.groupId === 'pending').length,
+    groupDetails: groups.map(g => ({
+      id: g.id?.slice(-4),
+      label: g.label,
+      color: g.color
+    }))
   });
 
   return (
@@ -774,7 +794,8 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
                 // Check if this card is part of a preview group (70% overlap achieved)
                 const isInPreviewGroup = potentialGroup && previewGroupColor && 
                   (potentialGroup.target === independentResponse.id || potentialGroup.dragged === independentResponse.id) &&
-                  (potentialGroup.overlap || 0) >= 70;
+                  (potentialGroup.overlap || 0) >= 70 && 
+                  !independentResponse.groupId; // Only show preview for ungrouped cards
                 
                 return (
                   <div
