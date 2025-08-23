@@ -187,7 +187,8 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
   const [hoveringOverCard, setHoveringOverCard] = useState<string | null>(null);
   const [potentialGroup, setPotentialGroup] = useState<{target: string; dragged: string} | null>(null);
   const [showUngroupHint, setShowUngroupHint] = useState<string | null>(null);
-  const [lastAction, setLastAction] = useState<{type: 'group' | 'ungroup'; data: any} | null>(null);
+  // Future enhancement: undo/redo system
+  // const [lastAction, setLastAction] = useState<{type: 'group' | 'ungroup'; data: unknown} | null>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -375,25 +376,25 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
     setShowUngroupHint(null);
   };
 
-  // Bulk ungroup for entire group
-  const handleBulkUngroup = (groupId: string) => {
-    const groupResponses = responses.filter(r => r.groupId === groupId);
+  // Future enhancement: Bulk ungroup for entire group
+  // const handleBulkUngroup = (groupId: string) => {
+  //   const groupResponses = responses.filter(r => r.groupId === groupId);
     
-    // Immediate visual feedback
-    setResponses(prev => prev.map(r => 
-      r.groupId === groupId 
-        ? { ...r, groupId: null }
-        : r
-    ));
+  //   // Immediate visual feedback
+  //   setResponses(prev => prev.map(r => 
+  //     r.groupId === groupId 
+  //       ? { ...r, groupId: null }
+  //       : r
+  //   ));
 
-    // Emit for each response
-    groupResponses.forEach(response => {
-      socketService.emit('ungroup_response', {
-        responseId: response.id,
-        sessionId: session.id
-      });
-    });
-  };
+  //   // Emit for each response
+  //   groupResponses.forEach(response => {
+  //     socketService.emit('ungroup_response', {
+  //       responseId: response.id,
+  //       sessionId: session.id
+  //     });
+  //   });
+  // };
 
   const handleDragOver = (event: DragOverEvent) => {
     const { active, over } = event;
@@ -722,7 +723,6 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
                 
                 // Check if this card is being hovered over during drag
                 const isHoveredOver = hoveringOverCard === independentResponse.id;
-                const isDragging = activeId === independentResponse.id;
                 const isPotentialTarget = potentialGroup?.target === independentResponse.id;
                 const shouldShowUngroupHint = showUngroupHint === independentResponse.id;
                 
