@@ -33,9 +33,10 @@ interface ResponseCardProps {
   isHoveredOver?: boolean;
   isPotentialGroupTarget?: boolean;
   showUngroupHint?: boolean;
+  group?: Group | null;
 }
 
-function ResponseCard({ response, isDragging, onDoubleClick, isTopCard, isHoveredOver, isPotentialGroupTarget, showUngroupHint }: ResponseCardProps) {
+function ResponseCard({ response, isDragging, onDoubleClick, isTopCard, isHoveredOver, isPotentialGroupTarget, showUngroupHint, group }: ResponseCardProps) {
   const {
     attributes,
     listeners,
@@ -56,7 +57,6 @@ function ResponseCard({ response, isDragging, onDoubleClick, isTopCard, isHovere
   return (
     <div
       ref={setNodeRef}
-      style={style}
       {...attributes}
       {...listeners}
       onDoubleClick={onDoubleClick}
@@ -64,9 +64,6 @@ function ResponseCard({ response, isDragging, onDoubleClick, isTopCard, isHovere
         response.category === 'WENT_WELL'
           ? 'bg-green-50 border-green-300 hover:bg-green-100'
           : 'bg-red-50 border-red-300 hover:bg-red-100'
-      } ${response.groupId 
-          ? `ring-2 ${isTopCard ? 'ring-4 ring-purple-400 shadow-lg' : 'ring-blue-300'} bg-opacity-90` 
-          : ''
       } ${isPotentialGroupTarget 
           ? 'ring-4 ring-yellow-400 shadow-xl bg-yellow-50 border-yellow-400' 
           : ''
@@ -74,6 +71,16 @@ function ResponseCard({ response, isDragging, onDoubleClick, isTopCard, isHovere
           ? 'shadow-xl border-opacity-70' 
           : ''
       }`}
+      style={{
+        ...style,
+        ...(response.groupId && group?.color ? {
+          borderColor: group.color,
+          boxShadow: `0 0 0 2px ${group.color}${isTopCard ? ', 0 0 0 4px ' + group.color + '40' : ''}`,
+          backgroundColor: response.category === 'WENT_WELL' 
+            ? 'rgba(34, 197, 94, 0.1)' 
+            : 'rgba(239, 68, 68, 0.1)'
+        } : {})
+      }}
     >
       <p className="text-gray-900 text-sm font-medium leading-tight">{response.content}</p>
       <div className="flex items-center gap-2 mt-2 text-xs text-gray-600">
@@ -522,17 +529,13 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
           const topCard = newY < (overlappingCard.positionY || 0) ? draggedResponse : overlappingCard;
           const groupName = topCard.content.substring(0, 30) + (topCard.content.length > 30 ? '...' : '');
           
-          // Animate cards coming together
-          const midX = (newX + (overlappingCard.positionX || 0)) / 2;
-          const midY = (newY + (overlappingCard.positionY || 0)) / 2;
-          
-          // Update local state immediately with smooth animation
+          // Keep cards exactly where they are - don't move them when grouping
           setResponses(prev => prev.map(r => {
             if (r.id === responseId) {
-              return { ...r, positionX: midX - 20, positionY: midY - 10, groupId: 'pending' };
+              return { ...r, positionX: newX, positionY: newY, groupId: 'pending' };
             }
             if (r.id === overlappingCard.id) {
-              return { ...r, positionX: midX + 20, positionY: midY + 10, groupId: 'pending' };
+              return { ...r, groupId: 'pending' };
             }
             return r;
           }));
@@ -726,6 +729,11 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
                 const isPotentialTarget = potentialGroup?.target === independentResponse.id;
                 const shouldShowUngroupHint = showUngroupHint === independentResponse.id;
                 
+                // Find the group for this response
+                const responseGroup = independentResponse.groupId 
+                  ? groups.find(g => g.id === independentResponse.groupId) 
+                  : null;
+                
                 return (
                   <div
                     key={`card-${response.id}`} // Simpler unique key
@@ -751,6 +759,7 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
                       isHoveredOver={isHoveredOver}
                       isPotentialGroupTarget={isPotentialTarget}
                       showUngroupHint={shouldShowUngroupHint}
+                      group={responseGroup}
                     />
                   </div>
                 );
