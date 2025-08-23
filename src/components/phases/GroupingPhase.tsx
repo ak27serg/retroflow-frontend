@@ -34,9 +34,11 @@ interface ResponseCardProps {
   isPotentialGroupTarget?: boolean;
   showUngroupHint?: boolean;
   group?: Group | null;
+  previewColor?: string | null;
+  isInPreviewGroup?: boolean;
 }
 
-function ResponseCard({ response, isDragging, onDoubleClick, isTopCard, isHoveredOver, isPotentialGroupTarget, showUngroupHint, group }: ResponseCardProps) {
+function ResponseCard({ response, isDragging, onDoubleClick, isTopCard, isHoveredOver, isPotentialGroupTarget, showUngroupHint, group, previewColor, isInPreviewGroup }: ResponseCardProps) {
   const {
     attributes,
     listeners,
@@ -73,9 +75,9 @@ function ResponseCard({ response, isDragging, onDoubleClick, isTopCard, isHovere
       }`}
       style={{
         ...style,
-        ...(response.groupId && group?.color ? {
-          borderColor: group.color,
-          boxShadow: `0 0 0 2px ${group.color}${isTopCard ? ', 0 0 0 4px ' + group.color + '40' : ''}`,
+        ...((response.groupId && group?.color) || (isInPreviewGroup && previewColor) ? {
+          borderColor: (isInPreviewGroup && previewColor) ? previewColor : group?.color,
+          boxShadow: `0 0 0 2px ${(isInPreviewGroup && previewColor) ? previewColor : group?.color}${isTopCard ? ', 0 0 0 4px ' + ((isInPreviewGroup && previewColor) ? previewColor : group?.color) + '40' : ''}`,
           backgroundColor: response.category === 'WENT_WELL' 
             ? 'rgba(34, 197, 94, 0.1)' 
             : 'rgba(239, 68, 68, 0.1)'
@@ -192,8 +194,9 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
   const [activeId, setActiveId] = useState<string | null>(null);
   const [draggedResponse, setDraggedResponse] = useState<Response | null>(null);
   const [hoveringOverCard, setHoveringOverCard] = useState<string | null>(null);
-  const [potentialGroup, setPotentialGroup] = useState<{target: string; dragged: string} | null>(null);
+  const [potentialGroup, setPotentialGroup] = useState<{target: string; dragged: string; overlap?: number} | null>(null);
   const [showUngroupHint, setShowUngroupHint] = useState<string | null>(null);
+  const [previewGroupColor, setPreviewGroupColor] = useState<string | null>(null);
   // Future enhancement: undo/redo system
   // const [lastAction, setLastAction] = useState<{type: 'group' | 'ungroup'; data: unknown} | null>(null);
 
@@ -404,11 +407,12 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
   // };
 
   const handleDragOver = (event: DragOverEvent) => {
-    const { active, over } = event;
+    const { active, over, delta } = event;
     
     if (!active || !over || active.id === over.id) {
       setHoveringOverCard(null);
       setPotentialGroup(null);
+      setPreviewGroupColor(null);
       return;
     }
 
@@ -417,29 +421,57 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
 
     // Check if dragging over another card
     const isOverCard = responses.some(r => r.id === over.id);
-    if (isOverCard && targetResponse) {
+    if (isOverCard && targetResponse && draggedResponse) {
       setHoveringOverCard(over.id as string);
       
-      // Check if this would create a valid grouping (70% overlap simulation)
-      // For preview purposes, assume any hover over a card is potential grouping
-      if (draggedResponse && !draggedResponse.groupId) {
-        setPotentialGroup({
-          target: over.id as string,
-          dragged: active.id as string
-        });
+      // Calculate actual overlap percentage for live feedback
+      if (!draggedResponse.groupId && delta) {
+        const draggedX = (draggedResponse.positionX || 0) + delta.x;
+        const draggedY = (draggedResponse.positionY || 0) + delta.y;
+        const targetX = targetResponse.positionX || 0;
+        const targetY = targetResponse.positionY || 0;
+        
+        const draggedRect = { x: draggedX, y: draggedY, width: 192, height: 120 };
+        const targetRect = { x: targetX, y: targetY, width: 192, height: 120 };
+        
+        const overlapPercent = calculateOverlap(draggedRect, targetRect);
+        
+        if (overlapPercent >= 70) {
+          // Generate a consistent color for this potential group
+          const groupColor = `hsl(${(active.id as string).charCodeAt(0) * 7 % 360}, 70%, 60%)`;
+          setPotentialGroup({
+            target: over.id as string,
+            dragged: active.id as string,
+            overlap: overlapPercent
+          });
+          setPreviewGroupColor(groupColor);
+        } else if (overlapPercent > 30) {
+          // Show potential but not yet valid
+          setPotentialGroup({
+            target: over.id as string,
+            dragged: active.id as string,
+            overlap: overlapPercent
+          });
+          setPreviewGroupColor(null);
+        } else {
+          setPotentialGroup(null);
+          setPreviewGroupColor(null);
+        }
       } else {
         setPotentialGroup(null);
+        setPreviewGroupColor(null);
       }
     } else {
       setHoveringOverCard(null);
       setPotentialGroup(null);
+      setPreviewGroupColor(null);
     }
   };
 
   const handleDragEnd = (event: DragEndEvent) => {
-    const { active, delta } = event;
+    const { active, delta, over } = event;
     
-    if (!active || !delta) {
+    if (!active) {
       setActiveId(null);
       setDraggedResponse(null);
       return;
@@ -454,9 +486,13 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
       return;
     }
 
-    // Calculate new position for this specific card only
+    // Calculate the exact cursor position where the card should end up
     const currentX = draggedResponse.positionX || 0;
     const currentY = draggedResponse.positionY || 0;
+    
+    // Use delta if available, otherwise fall back to current position
+    let newX = delta ? currentX + delta.x : currentX;
+    let newY = delta ? currentY + delta.y : currentY;
     
     // Add boundary constraints - card dimensions are 192px width (w-48)
     const cardWidth = 192;
@@ -472,8 +508,8 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
     const maxX = fieldWidth - cardWidth - (padding * 2);
     const maxY = fieldHeight - cardHeight - (padding * 2);
     
-    const newX = Math.max(padding, Math.min(maxX, currentX + delta.x));
-    const newY = Math.max(padding, Math.min(maxY, currentY + delta.y));
+    newX = Math.max(padding, Math.min(maxX, newX));
+    newY = Math.max(padding, Math.min(maxY, newY));
 
     // Always move just this card first (no group movement for now to prevent bugs)
     setResponses(prev => prev.map(r => 
@@ -582,6 +618,7 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
     setDraggedResponse(null);
     setHoveringOverCard(null);
     setPotentialGroup(null);
+    setPreviewGroupColor(null);
   };
 
   const ungroupedResponses = responses.filter(r => !r.groupId);
@@ -734,6 +771,11 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
                   ? groups.find(g => g.id === independentResponse.groupId) 
                   : null;
                 
+                // Check if this card is part of a preview group (70% overlap achieved)
+                const isInPreviewGroup = potentialGroup && previewGroupColor && 
+                  (potentialGroup.target === independentResponse.id || potentialGroup.dragged === independentResponse.id) &&
+                  (potentialGroup.overlap || 0) >= 70;
+                
                 return (
                   <div
                     key={`card-${response.id}`} // Simpler unique key
@@ -760,6 +802,8 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
                       isPotentialGroupTarget={isPotentialTarget}
                       showUngroupHint={shouldShowUngroupHint}
                       group={responseGroup}
+                      previewColor={previewGroupColor}
+                      isInPreviewGroup={!!isInPreviewGroup}
                     />
                   </div>
                 );
