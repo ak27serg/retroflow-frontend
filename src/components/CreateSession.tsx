@@ -5,8 +5,8 @@ import { useRouter } from 'next/navigation';
 import { apiService } from '@/lib/api';
 
 const AVATAR_OPTIONS = [
-  '🦸‍♂️', '🦸‍♀️', '🧙‍♂️', '🧙‍♀️', '🦹‍♂️', '🦹‍♀️', '🤖', '👽',
-  '🧛‍♂️', '🧛‍♀️', '🧚‍♂️', '🧚‍♀️', '🦄', '🐉', '👻', '🎭'
+  '🦁', '🐯', '🦊', '🐺', '🐙', '🦈', '🤖', '🦅',
+  '🐉', '🦋', '🐝', '🦜', '🦩', '🐧', '👻', '🦖'
 ];
 
 export default function CreateSession() {
@@ -14,7 +14,7 @@ export default function CreateSession() {
   const [formData, setFormData] = useState({
     title: '',
     hostName: '',
-    hostAvatar: '🦸‍♂️'
+    hostAvatar: '🦁'
   });
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
