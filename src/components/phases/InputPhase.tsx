@@ -105,11 +105,9 @@ export default function InputPhase({ session, participant, isConnected }: InputP
       socket.off('participant_typing_stop', handleTypingStop);
       
       // Clear all timeouts on cleanup
-      return () => {
-        typingTimeouts.forEach(timeout => clearTimeout(timeout));
-      };
+      typingTimeouts.forEach(timeout => clearTimeout(timeout));
     };
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const addResponse = async (category: 'WENT_WELL' | 'DIDNT_GO_WELL', content: string) => {
     if (!content.trim() || !isConnected) return;

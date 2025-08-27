@@ -196,7 +196,7 @@ export default function ResultsPhase({ session, participant }: ResultsPhaseProps
 
     window.addEventListener('keydown', handleKeyPress);
     return () => window.removeEventListener('keydown', handleKeyPress);
-  }, [isInPresentation, participant.isHost, nextItem, prevItem]);
+  }, [isInPresentation, participant.isHost, nextItem, prevItem]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const getMedal = (index: number) => {
     if (index === 0) return '🥇';

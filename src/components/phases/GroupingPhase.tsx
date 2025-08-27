@@ -539,7 +539,7 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
   };
 
   const handleDragEnd = (event: DragEndEvent) => {
-    const { active, delta, over } = event;
+    const { active, delta } = event;
     
     if (!active) {
       setActiveId(null);
