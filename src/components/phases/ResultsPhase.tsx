@@ -17,6 +17,37 @@ export default function ResultsPhase({ session, participant }: ResultsPhaseProps
   const [newActionItem, setNewActionItem] = useState('');
   const [presentationMode, setPresentationMode] = useState(false);
   const [currentItemIndex, setCurrentItemIndex] = useState(0);
+  const [isInPresentation, setIsInPresentation] = useState(false);
+
+  useEffect(() => {
+    // Listen for presentation mode events
+    const socket = socketService.getSocket();
+    if (!socket) return;
+
+    const handlePresentationStart = () => {
+      setIsInPresentation(true);
+      setCurrentItemIndex(0);
+    };
+
+    const handlePresentationEnd = () => {
+      setIsInPresentation(false);
+      setCurrentItemIndex(0);
+    };
+
+    const handlePresentationNavigate = (data: { itemIndex: number }) => {
+      setCurrentItemIndex(data.itemIndex);
+    };
+
+    socket.on('presentation_started', handlePresentationStart);
+    socket.on('presentation_ended', handlePresentationEnd);
+    socket.on('presentation_navigate', handlePresentationNavigate);
+
+    return () => {
+      socket.off('presentation_started', handlePresentationStart);
+      socket.off('presentation_ended', handlePresentationEnd);
+      socket.off('presentation_navigate', handlePresentationNavigate);
+    };
+  }, []);
 
   useEffect(() => {
     console.log('ResultsPhase: Processing session data', {
@@ -105,34 +136,53 @@ export default function ResultsPhase({ session, participant }: ResultsPhaseProps
   };
 
   const startPresentation = () => {
+    if (!participant.isHost) return;
     setPresentationMode(true);
+    setIsInPresentation(true);
     setCurrentItemIndex(0);
+    // Broadcast to all participants
+    socketService.emit('start_presentation', { sessionId: session.id });
   };
 
   const exitPresentation = () => {
+    if (!participant.isHost) return;
     setPresentationMode(false);
+    setIsInPresentation(false);
     setCurrentItemIndex(0);
+    // Broadcast to all participants
+    socketService.emit('end_presentation', { sessionId: session.id });
   };
 
   const nextItem = useCallback(() => {
+    if (!participant.isHost) return;
     if (currentItemIndex < groups.length - 1) {
-      setCurrentItemIndex(prev => prev + 1);
+      const newIndex = currentItemIndex + 1;
+      setCurrentItemIndex(newIndex);
+      // Broadcast navigation to all participants
+      socketService.emit('navigate_presentation', { sessionId: session.id, itemIndex: newIndex });
     }
-  }, [currentItemIndex, groups.length]);
+  }, [currentItemIndex, groups.length, participant.isHost, session.id]);
 
   const prevItem = useCallback(() => {
+    if (!participant.isHost) return;
     if (currentItemIndex > 0) {
-      setCurrentItemIndex(prev => prev - 1);
+      const newIndex = currentItemIndex - 1;
+      setCurrentItemIndex(newIndex);
+      // Broadcast navigation to all participants
+      socketService.emit('navigate_presentation', { sessionId: session.id, itemIndex: newIndex });
     }
-  }, [currentItemIndex]);
+  }, [currentItemIndex, participant.isHost, session.id]);
 
   const goToItem = (index: number) => {
+    if (!participant.isHost) return;
     setCurrentItemIndex(index);
+    // Broadcast navigation to all participants
+    socketService.emit('navigate_presentation', { sessionId: session.id, itemIndex: index });
   };
 
-  // Handle keyboard navigation
+  // Handle keyboard navigation (host only)
   useEffect(() => {
-    if (!presentationMode) return;
+    if (!isInPresentation || !participant.isHost) return;
 
     const handleKeyPress = (event: KeyboardEvent) => {
       if (event.key === 'ArrowRight' || event.key === ' ') {
@@ -146,7 +196,7 @@ export default function ResultsPhase({ session, participant }: ResultsPhaseProps
 
     window.addEventListener('keydown', handleKeyPress);
     return () => window.removeEventListener('keydown', handleKeyPress);
-  }, [presentationMode, currentItemIndex, groups.length, nextItem, prevItem]);
+  }, [isInPresentation, participant.isHost, nextItem, prevItem]);
 
   const getMedal = (index: number) => {
     if (index === 0) return '🥇';
@@ -159,20 +209,22 @@ export default function ResultsPhase({ session, participant }: ResultsPhaseProps
   const totalVotes = groups.reduce((sum, group) => sum + group.voteCount, 0);
   const participantCount = session.participants?.length || 0;
 
-  // Presentation Mode View
-  if (presentationMode) {
+  // Presentation Mode View - visible to all participants
+  if (presentationMode || isInPresentation) {
     const currentItem = groups[currentItemIndex];
     if (!currentItem) {
       return (
         <div className="min-h-screen bg-gradient-to-br from-gray-900 to-gray-700 flex items-center justify-center text-white">
           <div className="text-center">
             <h1 className="text-4xl font-bold mb-4">No Results to Display</h1>
-            <button
-              onClick={exitPresentation}
-              className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 font-semibold"
-            >
-              Back to Summary
-            </button>
+            {participant.isHost && (
+              <button
+                onClick={exitPresentation}
+                className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 font-semibold"
+              >
+                Back to Summary
+              </button>
+            )}
           </div>
         </div>
       );
@@ -183,12 +235,14 @@ export default function ResultsPhase({ session, participant }: ResultsPhaseProps
         {/* Header */}
         <div className="flex justify-between items-center p-6">
           <div className="flex items-center gap-4">
-            <button
-              onClick={exitPresentation}
-              className="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-lg font-semibold"
-            >
-              ← Back to Summary
-            </button>
+            {participant.isHost && (
+              <button
+                onClick={exitPresentation}
+                className="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-lg font-semibold"
+              >
+                ← Back to Summary
+              </button>
+            )}
             <span className="text-lg">
               {currentItemIndex + 1} of {groups.length}
             </span>
@@ -197,23 +251,27 @@ export default function ResultsPhase({ session, participant }: ResultsPhaseProps
           <h1 className="text-2xl font-bold">{session.title}</h1>
           
           <div className="flex items-center gap-2">
-            <span className="text-sm text-gray-300">Use ← → keys or</span>
-            <div className="flex gap-1">
-              <button
-                onClick={prevItem}
-                disabled={currentItemIndex === 0}
-                className="bg-gray-700 hover:bg-gray-600 text-white px-3 py-1 rounded disabled:opacity-50"
-              >
-                ←
-              </button>
-              <button
-                onClick={nextItem}
-                disabled={currentItemIndex === groups.length - 1}
-                className="bg-gray-700 hover:bg-gray-600 text-white px-3 py-1 rounded disabled:opacity-50"
-              >
-                →
-              </button>
-            </div>
+            {participant.isHost && (
+              <>
+                <span className="text-sm text-gray-300">Use ← → keys or</span>
+                <div className="flex gap-1">
+                  <button
+                    onClick={prevItem}
+                    disabled={currentItemIndex === 0}
+                    className="bg-gray-700 hover:bg-gray-600 text-white px-3 py-1 rounded disabled:opacity-50"
+                  >
+                    ←
+                  </button>
+                  <button
+                    onClick={nextItem}
+                    disabled={currentItemIndex === groups.length - 1}
+                    className="bg-gray-700 hover:bg-gray-600 text-white px-3 py-1 rounded disabled:opacity-50"
+                  >
+                    →
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
 
@@ -268,15 +326,26 @@ export default function ResultsPhase({ session, participant }: ResultsPhaseProps
             {/* Progress Dots */}
             <div className="flex justify-center gap-2">
               {groups.map((_, index) => (
-                <button
-                  key={index}
-                  onClick={() => goToItem(index)}
-                  className={`w-3 h-3 rounded-full transition-colors ${
-                    index === currentItemIndex
-                      ? 'bg-white'
-                      : 'bg-white/30 hover:bg-white/50'
-                  }`}
-                />
+                participant.isHost ? (
+                  <button
+                    key={index}
+                    onClick={() => goToItem(index)}
+                    className={`w-3 h-3 rounded-full transition-colors ${
+                      index === currentItemIndex
+                        ? 'bg-white'
+                        : 'bg-white/30 hover:bg-white/50'
+                    }`}
+                  />
+                ) : (
+                  <div
+                    key={index}
+                    className={`w-3 h-3 rounded-full transition-colors ${
+                      index === currentItemIndex
+                        ? 'bg-white'
+                        : 'bg-white/30'
+                    }`}
+                  />
+                )
               ))}
             </div>
           </div>
