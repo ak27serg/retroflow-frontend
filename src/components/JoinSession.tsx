@@ -22,6 +22,7 @@ export default function JoinSession() {
     title?: string;
     currentPhase?: string;
     participantCount: number;
+    participants?: Array<{ avatarId: string; displayName: string }>;
   } | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
@@ -39,7 +40,13 @@ export default function JoinSession() {
 
     try {
       const session = await apiService.getSessionByInviteCode(formData.inviteCode.toUpperCase());
-      setSessionInfo(session);
+      setSessionInfo({
+        id: session.id,
+        title: session.title,
+        currentPhase: session.currentPhase,
+        participantCount: session.participants?.length || 0,
+        participants: session.participants?.map(p => ({ avatarId: p.avatarId, displayName: p.displayName })) || []
+      });
       setStep('details');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Invalid invite code');
@@ -162,20 +169,34 @@ export default function JoinSession() {
                 Choose Your Avatar
               </label>
               <div className="grid grid-cols-8 gap-2">
-                {AVATAR_OPTIONS.map((avatar, index) => (
-                  <button
-                    key={index}
-                    type="button"
-                    onClick={() => setFormData(prev => ({ ...prev, avatarId: avatar }))}
-                    className={`p-3 rounded-lg text-2xl hover:bg-green-50 border-2 transition-colors flex items-center justify-center ${
-                      formData.avatarId === avatar 
-                        ? 'border-green-500 bg-green-50' 
-                        : 'border-gray-200'
-                    }`}
-                  >
-                    {avatar}
-                  </button>
-                ))}
+                {AVATAR_OPTIONS.map((avatar, index) => {
+                  const isUsed = sessionInfo?.participants?.some(p => p.avatarId === avatar) || false;
+                  const isSelected = formData.avatarId === avatar;
+                  
+                  return (
+                    <button
+                      key={index}
+                      type="button"
+                      onClick={() => !isUsed && setFormData(prev => ({ ...prev, avatarId: avatar }))}
+                      disabled={isUsed && !isSelected}
+                      className={`p-3 rounded-lg text-2xl border-2 transition-colors flex items-center justify-center relative ${
+                        isUsed && !isSelected
+                          ? 'border-gray-200 bg-gray-100 opacity-50 cursor-not-allowed'
+                          : isSelected 
+                          ? 'border-green-500 bg-green-50 hover:bg-green-50' 
+                          : 'border-gray-200 hover:bg-green-50'
+                      }`}
+                      title={isUsed ? `Used by ${sessionInfo?.participants?.find(p => p.avatarId === avatar)?.displayName}` : ''}
+                    >
+                      {avatar}
+                      {isUsed && !isSelected && (
+                        <div className="absolute inset-0 flex items-center justify-center bg-gray-200/80 rounded-lg">
+                          <span className="text-sm text-gray-600">✗</span>
+                        </div>
+                      )}
+                    </button>
+                  );
+                })}
               </div>
             </div>
 

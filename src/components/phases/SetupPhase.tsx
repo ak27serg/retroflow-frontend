@@ -12,6 +12,14 @@ interface SetupPhaseProps {
 
 export default function SetupPhase({ session, participant, isConnected }: SetupPhaseProps) {
   const [isStarting, setIsStarting] = useState(false);
+  const [timerDuration, setTimerDuration] = useState(300); // Default 5 minutes
+
+  const timerOptions = [
+    { value: 180, label: '3 minutes' },
+    { value: 300, label: '5 minutes' },
+    { value: 420, label: '7 minutes' },
+    { value: 600, label: '10 minutes' }
+  ];
 
   console.log('SetupPhase received:', {
     session,
@@ -28,7 +36,7 @@ export default function SetupPhase({ session, participant, isConnected }: SetupP
     socketService.emit('change_phase', {
       sessionId: session.id,
       phase: 'INPUT',
-      timerDuration: 300 // 5 minutes
+      timerDuration: timerDuration
     });
   };
 
@@ -113,7 +121,7 @@ export default function SetupPhase({ session, participant, isConnected }: SetupP
               <div className="p-4 bg-blue-50 rounded-lg">
                 <h3 className="font-semibold text-blue-900 mb-2">What We&apos;ll Do:</h3>
                 <ol className="text-sm text-blue-800 space-y-1 list-decimal list-inside">
-                  <li>Share thoughts privately (10 min)</li>
+                  <li>Share thoughts privately ({timerOptions.find(opt => opt.value === timerDuration)?.label})</li>
                   <li>Group related feedback together</li>
                   <li>Vote on the most important topics</li>
                   <li>Review results and plan actions</li>
@@ -130,7 +138,29 @@ export default function SetupPhase({ session, participant, isConnected }: SetupP
               </div>
 
               {participant.isHost && (
-                <div className="pt-4 border-t">
+                <div className="pt-4 border-t space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      ⏱️ Input Phase Duration
+                    </label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {timerOptions.map((option) => (
+                        <button
+                          key={option.value}
+                          type="button"
+                          onClick={() => setTimerDuration(option.value)}
+                          className={`p-3 rounded-lg border-2 text-sm font-medium transition-colors ${
+                            timerDuration === option.value
+                              ? 'border-blue-500 bg-blue-50 text-blue-700'
+                              : 'border-gray-200 text-gray-700 hover:bg-gray-50'
+                          }`}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  
                   <button
                     onClick={startRetro}
                     disabled={!isConnected || isStarting || (session.participants?.length || 0) < 1}
