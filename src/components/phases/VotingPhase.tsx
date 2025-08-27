@@ -224,26 +224,30 @@ export default function VotingPhase({ session, participant, isConnected }: Votin
                   </div>
                 </div>
 
-                {/* Group responses preview */}
-                <div className="mb-4 max-h-32 overflow-y-auto">
-                  <div className="space-y-1">
-                    {group.responses?.slice(0, 3).map((response, index) => (
-                      <div
-                        key={response.id || index}
-                        className={`text-xs p-2 rounded ${
-                          response.category === 'WENT_WELL'
-                            ? 'bg-green-50 text-green-800'
-                            : 'bg-red-50 text-red-800'
-                        }`}
-                      >
+                {/* Group responses preview - consolidated view */}
+                <div className="mb-4">
+                  <div 
+                    className={`text-sm p-3 rounded-lg border-2 leading-relaxed ${
+                      group.responses?.[0]?.category === 'WENT_WELL'
+                        ? 'bg-green-50 border-green-200 text-green-900'
+                        : 'bg-red-50 border-red-200 text-red-900'
+                    }`}
+                    style={{
+                      display: '-webkit-box',
+                      WebkitLineClamp: 3,
+                      WebkitBoxOrient: 'vertical',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      maxHeight: '4.5em', // Approximately 3 lines
+                      lineHeight: '1.5em'
+                    }}
+                  >
+                    {group.responses?.map((response, index) => (
+                      <span key={response.id || index}>
+                        {index > 0 && ' • '}
                         {response.content}
-                      </div>
+                      </span>
                     ))}
-                    {(group.responses?.length || 0) > 3 && (
-                      <div className="text-xs text-gray-500 text-center">
-                        +{(group.responses?.length || 0) - 3} more items...
-                      </div>
-                    )}
                   </div>
                 </div>
 
