@@ -360,6 +360,69 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
     return topCard?.id === response.id;
   };
 
+  // Helper function to move all cards in a group together
+  const moveGroup = (draggedCardId: string, newX: number, newY: number) => {
+    const draggedCard = responses.find(r => r.id === draggedCardId);
+    if (!draggedCard?.groupId || draggedCard.groupId === 'pending') return;
+
+    const oldX = draggedCard.positionX || 0;
+    const oldY = draggedCard.positionY || 0;
+    
+    // Calculate the delta movement
+    const deltaX = newX - oldX;
+    const deltaY = newY - oldY;
+
+    // Move all cards in the group by the same delta
+    setResponses(prev => prev.map(r => {
+      if (r.groupId === draggedCard.groupId) {
+        const currentX = r.positionX || 0;
+        const currentY = r.positionY || 0;
+        
+        // Apply boundary constraints to each card
+        const cardWidth = 192;
+        const cardHeight = 120;
+        const fieldWidth = window.innerWidth > 1024 ? 1000 : window.innerWidth - 100;
+        const fieldHeight = 600;
+        const padding = 24;
+        const maxX = fieldWidth - cardWidth - (padding * 2);
+        const maxY = fieldHeight - cardHeight - (padding * 2);
+        
+        const newCardX = Math.max(padding, Math.min(maxX, currentX + deltaX));
+        const newCardY = Math.max(padding, Math.min(maxY, currentY + deltaY));
+        
+        return { ...r, positionX: newCardX, positionY: newCardY };
+      }
+      return r;
+    }));
+
+    // Emit move event for all cards in the group
+    const groupCards = responses.filter(r => r.groupId === draggedCard.groupId);
+    groupCards.forEach(card => {
+      const currentX = card.positionX || 0;
+      const currentY = card.positionY || 0;
+      
+      // Apply same boundary logic for server sync
+      const cardWidth = 192;
+      const cardHeight = 120;
+      const fieldWidth = window.innerWidth > 1024 ? 1000 : window.innerWidth - 100;
+      const fieldHeight = 600;
+      const padding = 24;
+      const maxX = fieldWidth - cardWidth - (padding * 2);
+      const maxY = fieldHeight - cardHeight - (padding * 2);
+      
+      const serverX = Math.max(padding, Math.min(maxX, currentX + deltaX));
+      const serverY = Math.max(padding, Math.min(maxY, currentY + deltaY));
+      
+      socketService.emit('drag_response', {
+        sessionId: session.id,
+        responseId: card.id,
+        x: serverX,
+        y: serverY,
+        groupId: card.groupId
+      });
+    });
+  };
+
   // Enhanced ungrouping with visual feedback and animation
   const handleDoubleClick = (responseId: string) => {
     const response = responses.find(r => r.id === responseId);
@@ -518,12 +581,28 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
     newX = Math.max(padding, Math.min(maxX, newX));
     newY = Math.max(padding, Math.min(maxY, newY));
 
-    // Always move just this card first (no group movement for now to prevent bugs)
-    setResponses(prev => prev.map(r => 
-      r.id === responseId 
-        ? { ...r, positionX: newX, positionY: newY }
-        : r
-    ));
+    // Check if this card is part of a group
+    if (draggedResponse.groupId && draggedResponse.groupId !== 'pending') {
+      // Move the entire group together
+      console.log('Moving group together for card:', draggedResponse.id.slice(-4));
+      moveGroup(responseId, newX, newY);
+    } else {
+      // Move just this single card
+      setResponses(prev => prev.map(r => 
+        r.id === responseId 
+          ? { ...r, positionX: newX, positionY: newY }
+          : r
+      ));
+
+      // Emit single card movement
+      socketService.emit('drag_response', {
+        sessionId: session.id,
+        responseId: responseId,
+        x: newX,
+        y: newY,
+        groupId: null
+      });
+    }
 
     // Check for 70% overlap with other cards for potential grouping (but only if dragged card is not in a group)
     if (!draggedResponse.groupId) {
@@ -612,16 +691,8 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
           groupId: null
         });
       }
-    } else {
-      // Card is already in a group, just emit the move (state already updated above)
-      socketService.emit('drag_response', {
-        sessionId: session.id,
-        responseId: responseId,
-        x: newX,
-        y: newY,
-        groupId: draggedResponse.groupId
-      });
     }
+    // Note: Group movement is handled earlier in the function
 
     setActiveId(null);
     setDraggedResponse(null);
