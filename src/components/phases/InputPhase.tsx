@@ -41,47 +41,54 @@ export default function InputPhase({ session, participant, isConnected }: InputP
     };
 
     const handleTypingStart = (data: { participantId: string }) => {
+      console.log('Typing start received:', data.participantId);
       setTypingParticipants(prev => new Set(prev).add(data.participantId));
       
       // Clear existing timeout for this participant
-      const existingTimeout = typingTimeouts.get(data.participantId);
-      if (existingTimeout) {
-        clearTimeout(existingTimeout);
-      }
-      
-      // Set new timeout to remove typing indicator after 3 seconds
-      const newTimeout = setTimeout(() => {
-        setTypingParticipants(prev => {
-          const newSet = new Set(prev);
-          newSet.delete(data.participantId);
-          return newSet;
-        });
-        setTypingTimeouts(prev => {
-          const newMap = new Map(prev);
-          newMap.delete(data.participantId);
-          return newMap;
-        });
-      }, 3000);
-      
-      setTypingTimeouts(prev => new Map(prev).set(data.participantId, newTimeout));
+      setTypingTimeouts(prev => {
+        const existingTimeout = prev.get(data.participantId);
+        if (existingTimeout) {
+          clearTimeout(existingTimeout);
+        }
+        
+        // Set new timeout to remove typing indicator after 3 seconds
+        const newTimeout = setTimeout(() => {
+          console.log('Removing typing indicator for:', data.participantId);
+          setTypingParticipants(current => {
+            const newSet = new Set(current);
+            newSet.delete(data.participantId);
+            return newSet;
+          });
+          setTypingTimeouts(current => {
+            const newMap = new Map(current);
+            newMap.delete(data.participantId);
+            return newMap;
+          });
+        }, 3000);
+        
+        const newMap = new Map(prev);
+        newMap.set(data.participantId, newTimeout);
+        return newMap;
+      });
     };
 
     const handleTypingStop = (data: { participantId: string }) => {
+      console.log('Typing stop received:', data.participantId);
       setTypingParticipants(prev => {
         const newSet = new Set(prev);
         newSet.delete(data.participantId);
         return newSet;
       });
       
-      const existingTimeout = typingTimeouts.get(data.participantId);
-      if (existingTimeout) {
-        clearTimeout(existingTimeout);
-        setTypingTimeouts(prev => {
-          const newMap = new Map(prev);
-          newMap.delete(data.participantId);
-          return newMap;
-        });
-      }
+      setTypingTimeouts(prev => {
+        const existingTimeout = prev.get(data.participantId);
+        if (existingTimeout) {
+          clearTimeout(existingTimeout);
+        }
+        const newMap = new Map(prev);
+        newMap.delete(data.participantId);
+        return newMap;
+      });
     };
 
     socket.on('response_added', handleResponseAdded);
@@ -97,8 +104,10 @@ export default function InputPhase({ session, participant, isConnected }: InputP
       socket.off('participant_typing_start', handleTypingStart);
       socket.off('participant_typing_stop', handleTypingStop);
       
-      // Clear all timeouts
-      typingTimeouts.forEach(timeout => clearTimeout(timeout));
+      // Clear all timeouts on cleanup
+      return () => {
+        typingTimeouts.forEach(timeout => clearTimeout(timeout));
+      };
     };
   }, []);
 
@@ -180,11 +189,13 @@ export default function InputPhase({ session, participant, isConnected }: InputP
 
     // Emit typing indicator
     if (text.trim()) {
+      console.log('Emitting typing start for participant:', participant.id);
       socketService.emit('typing_start', {
         sessionId: session.id,
         participantId: participant.id
       });
     } else {
+      console.log('Emitting typing stop for participant:', participant.id);
       socketService.emit('typing_stop', {
         sessionId: session.id,
         participantId: participant.id
@@ -195,9 +206,17 @@ export default function InputPhase({ session, participant, isConnected }: InputP
   const getTypingParticipants = () => {
     if (!participant.isHost) return [];
     
-    return Array.from(typingParticipants)
+    const typing = Array.from(typingParticipants)
       .map(participantId => session.participants?.find(p => p.id === participantId))
       .filter(p => p && p.id !== participant.id); // Exclude host from typing list
+    
+    console.log('Current typing participants:', {
+      typingParticipants: Array.from(typingParticipants),
+      foundParticipants: typing,
+      isHost: participant.isHost
+    });
+    
+    return typing;
   };
 
   return (
