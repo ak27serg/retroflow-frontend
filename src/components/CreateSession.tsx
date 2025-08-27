@@ -111,7 +111,7 @@ export default function CreateSession() {
                 key={index}
                 type="button"
                 onClick={() => setFormData(prev => ({ ...prev, hostAvatar: avatar }))}
-                className={`p-3 rounded-lg text-2xl hover:bg-blue-50 border-2 transition-colors ${
+                className={`p-3 rounded-lg text-2xl hover:bg-blue-50 border-2 transition-colors flex items-center justify-center ${
                   formData.hostAvatar === avatar 
                     ? 'border-blue-500 bg-blue-50' 
                     : 'border-gray-200'
