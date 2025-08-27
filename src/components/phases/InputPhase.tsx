@@ -141,7 +141,7 @@ export default function InputPhase({ session, participant, isConnected }: InputP
         <div className="grid md:grid-cols-2 gap-8">
           <div className="bg-green-50 border-2 border-green-200 rounded-xl p-6">
             <h2 className="text-xl font-semibold text-green-800 mb-4 flex items-center gap-2">
-              😊 What went well?
+              😊 What went well? (boom)
             </h2>
             <textarea
               value={wentWellText}
@@ -212,7 +212,7 @@ export default function InputPhase({ session, participant, isConnected }: InputP
 
           <div className="bg-red-50 border-2 border-red-200 rounded-xl p-6">
             <h2 className="text-xl font-semibold text-red-800 mb-4 flex items-center gap-2">
-              😕 What didn&apos;t go well?
+              😕 What didn&apos;t go well? (doom)
             </h2>
             <textarea
               value={didntGoWellText}
