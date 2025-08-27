@@ -19,6 +19,8 @@ export default function InputPhase({ session, participant, isConnected }: InputP
   const [responses, setResponses] = useState<Response[]>([]);
   const [editingResponseId, setEditingResponseId] = useState<string | null>(null);
   const [editText, setEditText] = useState('');
+  const [typingParticipants, setTypingParticipants] = useState<Set<string>>(new Set());
+  const [typingTimeouts, setTypingTimeouts] = useState<Map<string, NodeJS.Timeout>>(new Map());
 
   useEffect(() => {
     // Listen for response events
@@ -38,14 +40,65 @@ export default function InputPhase({ session, participant, isConnected }: InputP
       setResponses(prev => prev.filter(r => r.id !== data.responseId));
     };
 
+    const handleTypingStart = (data: { participantId: string }) => {
+      setTypingParticipants(prev => new Set(prev).add(data.participantId));
+      
+      // Clear existing timeout for this participant
+      const existingTimeout = typingTimeouts.get(data.participantId);
+      if (existingTimeout) {
+        clearTimeout(existingTimeout);
+      }
+      
+      // Set new timeout to remove typing indicator after 3 seconds
+      const newTimeout = setTimeout(() => {
+        setTypingParticipants(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(data.participantId);
+          return newSet;
+        });
+        setTypingTimeouts(prev => {
+          const newMap = new Map(prev);
+          newMap.delete(data.participantId);
+          return newMap;
+        });
+      }, 3000);
+      
+      setTypingTimeouts(prev => new Map(prev).set(data.participantId, newTimeout));
+    };
+
+    const handleTypingStop = (data: { participantId: string }) => {
+      setTypingParticipants(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(data.participantId);
+        return newSet;
+      });
+      
+      const existingTimeout = typingTimeouts.get(data.participantId);
+      if (existingTimeout) {
+        clearTimeout(existingTimeout);
+        setTypingTimeouts(prev => {
+          const newMap = new Map(prev);
+          newMap.delete(data.participantId);
+          return newMap;
+        });
+      }
+    };
+
     socket.on('response_added', handleResponseAdded);
     socket.on('response_updated', handleResponseUpdated);
     socket.on('response_deleted', handleResponseDeleted);
+    socket.on('participant_typing_start', handleTypingStart);
+    socket.on('participant_typing_stop', handleTypingStop);
 
     return () => {
       socket.off('response_added', handleResponseAdded);
       socket.off('response_updated', handleResponseUpdated);
       socket.off('response_deleted', handleResponseDeleted);
+      socket.off('participant_typing_start', handleTypingStart);
+      socket.off('participant_typing_stop', handleTypingStop);
+      
+      // Clear all timeouts
+      typingTimeouts.forEach(timeout => clearTimeout(timeout));
     };
   }, []);
 
@@ -118,6 +171,35 @@ export default function InputPhase({ session, participant, isConnected }: InputP
     }
   };
 
+  const handleTextChange = (text: string, category: 'WENT_WELL' | 'DIDNT_GO_WELL') => {
+    if (category === 'WENT_WELL') {
+      setWentWellText(text);
+    } else {
+      setDidntGoWellText(text);
+    }
+
+    // Emit typing indicator
+    if (text.trim()) {
+      socketService.emit('typing_start', {
+        sessionId: session.id,
+        participantId: participant.id
+      });
+    } else {
+      socketService.emit('typing_stop', {
+        sessionId: session.id,
+        participantId: participant.id
+      });
+    }
+  };
+
+  const getTypingParticipants = () => {
+    if (!participant.isHost) return [];
+    
+    return Array.from(typingParticipants)
+      .map(participantId => session.participants?.find(p => p.id === participantId))
+      .filter(p => p && p.id !== participant.id); // Exclude host from typing list
+  };
+
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="text-center mb-8">
@@ -132,6 +214,19 @@ export default function InputPhase({ session, participant, isConnected }: InputP
               onTimeUp={handleTimerEnd}
               className="max-w-sm"
             />
+          </div>
+        )}
+        
+        {/* Typing indicators - visible to host only */}
+        {participant.isHost && getTypingParticipants().length > 0 && (
+          <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg max-w-md mx-auto">
+            <div className="flex items-center gap-2">
+              <div className="animate-pulse text-blue-600">✍️</div>
+              <span className="text-sm text-blue-700">
+                {getTypingParticipants().map(p => `${p?.avatarId} ${p?.displayName}`).join(', ')} 
+                {getTypingParticipants().length === 1 ? 'is' : 'are'} typing...
+              </span>
+            </div>
           </div>
         )}
         
@@ -165,7 +260,7 @@ export default function InputPhase({ session, participant, isConnected }: InputP
             </h2>
             <textarea
               value={wentWellText}
-              onChange={(e) => setWentWellText(e.target.value)}
+              onChange={(e) => handleTextChange(e.target.value, 'WENT_WELL')}
               placeholder="What worked well during this sprint? What should we keep doing?"
               className="w-full h-40 p-4 border border-green-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent resize-none text-gray-900 placeholder-gray-500"
             />
@@ -185,7 +280,21 @@ export default function InputPhase({ session, participant, isConnected }: InputP
                     <div className="space-y-2">
                       <textarea
                         value={editText}
-                        onChange={(e) => setEditText(e.target.value)}
+                        onChange={(e) => {
+                          setEditText(e.target.value);
+                          // Emit typing indicator for editing
+                          if (e.target.value.trim()) {
+                            socketService.emit('typing_start', {
+                              sessionId: session.id,
+                              participantId: participant.id
+                            });
+                          } else {
+                            socketService.emit('typing_stop', {
+                              sessionId: session.id,
+                              participantId: participant.id
+                            });
+                          }
+                        }}
                         className="w-full p-2 border border-green-300 rounded text-gray-900 placeholder-gray-500 resize-none"
                         rows={2}
                       />
@@ -236,7 +345,7 @@ export default function InputPhase({ session, participant, isConnected }: InputP
             </h2>
             <textarea
               value={didntGoWellText}
-              onChange={(e) => setDidntGoWellText(e.target.value)}
+              onChange={(e) => handleTextChange(e.target.value, 'DIDNT_GO_WELL')}
               placeholder="What challenges did we face? What should we improve or stop doing?"
               className="w-full h-40 p-4 border border-red-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent resize-none text-gray-900 placeholder-gray-500"
             />
@@ -256,7 +365,21 @@ export default function InputPhase({ session, participant, isConnected }: InputP
                     <div className="space-y-2">
                       <textarea
                         value={editText}
-                        onChange={(e) => setEditText(e.target.value)}
+                        onChange={(e) => {
+                          setEditText(e.target.value);
+                          // Emit typing indicator for editing
+                          if (e.target.value.trim()) {
+                            socketService.emit('typing_start', {
+                              sessionId: session.id,
+                              participantId: participant.id
+                            });
+                          } else {
+                            socketService.emit('typing_stop', {
+                              sessionId: session.id,
+                              participantId: participant.id
+                            });
+                          }
+                        }}
                         className="w-full p-2 border border-red-300 rounded text-gray-900 placeholder-gray-500 resize-none"
                         rows={2}
                       />
