@@ -28,7 +28,7 @@ export default function SetupPhase({ session, participant, isConnected }: SetupP
     socketService.emit('change_phase', {
       sessionId: session.id,
       phase: 'INPUT',
-      timerDuration: 600 // 10 minutes
+      timerDuration: 300 // 5 minutes
     });
   };
 

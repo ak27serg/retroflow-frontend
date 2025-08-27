@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { Session, Participant, Response } from '@/lib/api';
 import { socketService } from '@/lib/socket';
+import Timer from '@/components/Timer';
 
 interface InputPhaseProps {
   session: Session;
@@ -105,8 +106,16 @@ export default function InputPhase({ session, participant, isConnected }: InputP
   const moveToGrouping = () => {
     socketService.emit('change_phase', {
       sessionId: session.id,
-      phase: 'GROUPING'
+      phase: 'GROUPING',
+      stopTimer: true // Stop any running timer when manually changing phases
     });
+  };
+
+  const handleTimerEnd = () => {
+    // Auto-advance to grouping phase when timer ends
+    if (participant.isHost) {
+      moveToGrouping();
+    }
   };
 
   return (
@@ -115,11 +124,22 @@ export default function InputPhase({ session, participant, isConnected }: InputP
         <h1 className="text-4xl font-bold text-gray-900 mb-2">Input Phase</h1>
         <p className="text-gray-600">Share your thoughts privately - others can&apos;t see what you&apos;re typing</p>
         
+        {/* Timer - visible to all participants */}
+        {session.timerEndTime && (
+          <div className="mt-6 flex justify-center">
+            <Timer 
+              endTime={session.timerEndTime} 
+              onTimeUp={handleTimerEnd}
+              className="max-w-sm"
+            />
+          </div>
+        )}
+        
         {participant.isHost && (
           <div className="mt-4">
             <div className="flex gap-3 justify-center">
               <button
-                onClick={() => socketService.emit('change_phase', { sessionId: session.id, phase: 'SETUP' })}
+                onClick={() => socketService.emit('change_phase', { sessionId: session.id, phase: 'SETUP', stopTimer: true })}
                 disabled={!isConnected}
                 className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 disabled:opacity-50 flex items-center gap-2"
               >
