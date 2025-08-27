@@ -10,7 +10,7 @@ export default function HomePage() {
             <span className="text-blue-600">REDAPL</span> Storage Retro
           </h1>
           <p className="text-xl text-gray-600 max-w-2xl mx-auto">
-            Transform team reflection into actionable insights through collaborative retrospectives
+            Let&apos;s reflect on the past month of working together and come up with action items
           </p>
         </div>
 
