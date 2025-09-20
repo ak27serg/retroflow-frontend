@@ -1,23 +1,8 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { Session, Participant, Response, Group, apiService } from '@/lib/api';
+import { useState, useEffect } from 'react';
+import { Session, Participant, Response } from '@/lib/api';
 import { socketService } from '@/lib/socket';
-import {
-  DndContext,
-  DragEndEvent,
-  DragOverEvent,
-  DragStartEvent,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  DragOverlay,
-} from '@dnd-kit/core';
-// Removed unused imports: SortableContext, arrayMove, verticalListSortingStrategy
-import {
-  useSortable,
-} from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
 
 interface GroupingPhaseProps {
   session: Session;
@@ -27,62 +12,16 @@ interface GroupingPhaseProps {
 
 interface ResponseCardProps {
   response: Response;
-  isDragging?: boolean;
-  onDoubleClick?: () => void;
-  isTopCard?: boolean;
-  isHoveredOver?: boolean;
-  isPotentialGroupTarget?: boolean;
-  showUngroupHint?: boolean;
-  group?: Group | null;
-  previewColor?: string | null;
-  isInPreviewGroup?: boolean;
 }
 
-function ResponseCard({ response, isDragging, onDoubleClick, isTopCard, isHoveredOver, isPotentialGroupTarget, showUngroupHint, group, previewColor, isInPreviewGroup }: ResponseCardProps) {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging: isSortableDragging,
-  } = useSortable({ id: response.id });
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition: isDragging || isSortableDragging ? transition : 'all 0.2s ease-in-out',
-    opacity: isDragging || isSortableDragging ? 0.8 : 1,
-    zIndex: isDragging || isSortableDragging ? 100 : (isTopCard ? 10 : 1),
-    scale: isHoveredOver ? 0.95 : (isPotentialGroupTarget ? 1.05 : 1),
-  };
-
+function ResponseCard({ response }: ResponseCardProps) {
   return (
     <div
-      ref={setNodeRef}
-      {...attributes}
-      {...listeners}
-      onDoubleClick={onDoubleClick}
-      className={`p-3 rounded-lg border-2 cursor-grab active:cursor-grabbing shadow-sm hover:shadow-md transition-all duration-200 w-48 relative ${
+      className={`p-3 rounded-lg border-2 shadow-sm transition-all duration-200 w-48 relative ${
         response.category === 'WENT_WELL'
-          ? 'bg-green-50 border-green-300 hover:bg-green-100'
-          : 'bg-red-50 border-red-300 hover:bg-red-100'
-      } ${isPotentialGroupTarget 
-          ? 'ring-4 ring-yellow-400 shadow-xl bg-yellow-50 border-yellow-400' 
-          : ''
-      } ${isHoveredOver 
-          ? 'shadow-xl border-opacity-70' 
-          : ''
+          ? 'bg-green-50 border-green-300'
+          : 'bg-red-50 border-red-300'
       }`}
-      style={{
-        ...style,
-        ...((response.groupId && group?.color) || (isInPreviewGroup && previewColor) ? {
-          borderColor: (isInPreviewGroup && previewColor) ? previewColor : group?.color,
-          boxShadow: `0 0 0 2px ${(isInPreviewGroup && previewColor) ? previewColor : group?.color}${isTopCard ? ', 0 0 0 4px ' + ((isInPreviewGroup && previewColor) ? previewColor : group?.color) + '40' : ''}`,
-          backgroundColor: response.category === 'WENT_WELL' 
-            ? 'rgba(34, 197, 94, 0.1)' 
-            : 'rgba(239, 68, 68, 0.1)'
-        } : {})
-      }}
     >
       <p className="text-gray-900 text-sm font-medium leading-tight">{response.content}</p>
       <div className="flex items-center gap-2 mt-2 text-xs text-gray-600">
@@ -97,725 +36,55 @@ function ResponseCard({ response, isDragging, onDoubleClick, isTopCard, isHovere
         }`}>
           {response.category === 'WENT_WELL' ? '😊' : '😕'}
         </span>
-        {response.groupId && (
-          <span className={`text-xs font-semibold ${isTopCard ? 'text-purple-700' : 'text-blue-600'}`}>
-            {isTopCard ? '👑 Leader' : '🔗 Grouped'}
-          </span>
-        )}
-        {isPotentialGroupTarget && (
-          <span className="text-xs text-yellow-700 font-bold animate-pulse">
-            ✨ Drop Here
-          </span>
-        )}
       </div>
-      {response.groupId && (
-        <div className="absolute -top-1 -right-1 text-xs">
-          <span className={`${isTopCard ? 'bg-purple-500' : 'bg-blue-500'} text-white rounded-full px-1.5 py-0.5 text-[10px] shadow-md`}>
-            {isTopCard ? '👑' : '🔗'}
-          </span>
-        </div>
-      )}
-      {showUngroupHint && (
-        <div className="absolute -bottom-8 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white px-2 py-1 rounded text-xs whitespace-nowrap animate-pulse">
-          Double-click to ungroup
-        </div>
-      )}
     </div>
   );
 }
 
-// Unused interface - commented out for now
-/*
-interface GroupLabelProps {
-  group: Group;
-  onLabelChange: (groupId: string, label: string) => void;
-}
-*/
-
-// Unused component - commented out for now
-/*
-function GroupLabel({ group, onLabelChange }: GroupLabelProps) {
-  const [isEditing, setIsEditing] = useState(false);
-  const [labelText, setLabelText] = useState(group.label || '');
-
-  const saveLabel = () => {
-    if (labelText.trim()) {
-      onLabelChange(group.id, labelText.trim());
-    }
-    setIsEditing(false);
-  };
-
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      saveLabel();
-    } else if (e.key === 'Escape') {
-      setLabelText(group.label || '');
-      setIsEditing(false);
-    }
-  };
-
-  if (isEditing) {
-    return (
-      <div className="flex items-center gap-2">
-        <input
-          type="text"
-          value={labelText}
-          onChange={(e) => setLabelText(e.target.value)}
-          onKeyDown={handleKeyPress}
-          onBlur={saveLabel}
-          className="px-2 py-1 border rounded text-sm font-semibold text-gray-900 placeholder-gray-700"
-          placeholder="Group name"
-          autoFocus
-        />
-      </div>
-    );
-  }
-
-  return (
-    <div
-      className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 px-1 py-1 rounded"
-      onClick={() => {
-        setIsEditing(true);
-        setLabelText(group.label || '');
-      }}
-    >
-      <span className="font-semibold text-gray-800 text-sm">
-        {group.label || 'Click to name group'}
-      </span>
-      <span className="text-gray-400 text-xs">✏️</span>
-    </div>
-  );
-}
-*/
 
 export default function GroupingPhase({ session, participant, isConnected }: GroupingPhaseProps) {
   const [responses, setResponses] = useState<Response[]>([]);
-  const [groups, setGroups] = useState<Group[]>([]);
-  const [activeId, setActiveId] = useState<string | null>(null);
-  const [draggedResponse, setDraggedResponse] = useState<Response | null>(null);
-  const [hoveringOverCard, setHoveringOverCard] = useState<string | null>(null);
-  const [potentialGroup, setPotentialGroup] = useState<{target: string; dragged: string; overlap?: number} | null>(null);
-  const [showUngroupHint, setShowUngroupHint] = useState<string | null>(null);
-  const [previewGroupColor, setPreviewGroupColor] = useState<string | null>(null);
-  // Future enhancement: undo/redo system
-  // const [lastAction, setLastAction] = useState<{type: 'group' | 'ungroup'; data: unknown} | null>(null);
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: {
-        distance: 8,
-      },
-    })
-  );
 
-  const fetchSessionData = useCallback(async () => {
-    try {
-      const freshSession = await apiService.getSession(session.id);
-      if (freshSession.responses) {
-        setResponses(freshSession.responses);
-      }
-      if (freshSession.groups) {
-        setGroups(freshSession.groups);
-      }
-    } catch (error) {
-      console.error('Failed to fetch session data:', error);
-    }
-  }, [session.id]);
 
-  // Keyboard shortcuts for enhanced UX
-  useEffect(() => {
-    const handleKeyPress = (e: KeyboardEvent) => {
-      // Escape key to clear selections and hints
-      if (e.key === 'Escape') {
-        setShowUngroupHint(null);
-        setPotentialGroup(null);
-        setActiveId(null);
-      }
-      
-      // Ctrl+Z for undo (placeholder - would need proper undo/redo system)
-      if (e.ctrlKey && e.key === 'z') {
-        e.preventDefault();
-        // Could implement undo functionality here
-      }
-    };
-
-    document.addEventListener('keydown', handleKeyPress);
-    return () => document.removeEventListener('keydown', handleKeyPress);
-  }, []);
 
   useEffect(() => {
     // Initialize with session data if available
     if (session.responses) {
       setResponses(session.responses);
     }
-    if (session.groups) {
-      setGroups(session.groups);
-    }
-
-    // If no responses but we're in grouping phase, fetch fresh session data
-    if (!session.responses || session.responses.length === 0) {
-      fetchSessionData();
-    }
-
-    // Listen for real-time updates
-    const socket = socketService.getSocket();
-    if (!socket) return;
-
-    const handleResponseDragged = (data: { responseId: string; x: number; y: number; groupId: string | null; participantId?: string }) => {
-      // Only update if this is from another participant (prevent echo)
-      if (data.participantId && data.participantId !== participant.id) {
-        setResponses(prev => prev.map(response => {
-          if (response.id === data.responseId) {
-            console.log(`Syncing card movement from ${data.participantId}:`, {
-              responseId: data.responseId.slice(-4),
-              position: `(${data.x}, ${data.y})`,
-              groupId: data.groupId?.slice(-4) || 'none'
-            });
-            return {
-              ...response,
-              positionX: data.x,
-              positionY: data.y,
-              groupId: data.groupId
-            };
-          }
-          return response;
-        }));
-      }
-    };
-
-    const handleGroupCreated = (group: Group) => {
-      console.log('Group created:', {
-        groupId: group.id?.slice(-4),
-        label: group.label,
-        color: group.color,
-        responseCount: group.responses?.length || 0
-      });
-      setGroups(prev => [...prev, group]);
-      
-      // Update responses that were assigned to this group
-      if (group.responses) {
-        setResponses(prev => prev.map(response => {
-          const groupResponse = group.responses?.find(gr => gr.id === response.id);
-          if (groupResponse) {
-            console.log('Updating response to group:', response.id.slice(-4), '→', group.id?.slice(-4));
-            return { ...response, groupId: group.id };
-          }
-          return response;
-        }));
-      }
-    };
-
-    const handleGroupUpdated = (group: Group) => {
-      setGroups(prev => prev.map(g => g.id === group.id ? group : g));
-    };
-
-    const handleResponseUngrouped = (data: { responseId: string }) => {
-      setResponses(prev => prev.map(r => 
-        r.id === data.responseId 
-          ? { ...r, groupId: null }
-          : r
-      ));
-    };
-
-    const handleSocketError = (error: { message: string }) => {
-      console.error('Socket error in GroupingPhase:', error);
-      // Reset any pending group states on error
-      setResponses(prev => prev.map(r => 
-        r.groupId === 'pending' ? { ...r, groupId: null } : r
-      ));
-    };
-
-    socket.on('response_dragged', handleResponseDragged);
-    socket.on('group_created', handleGroupCreated);
-    socket.on('group_updated', handleGroupUpdated);
-    socket.on('response_ungrouped', handleResponseUngrouped);
-    socket.on('error', handleSocketError);
-
-    return () => {
-      socket.off('response_dragged', handleResponseDragged);
-      socket.off('group_created', handleGroupCreated);
-      socket.off('group_updated', handleGroupUpdated);
-      socket.off('response_ungrouped', handleResponseUngrouped);
-      socket.off('error', handleSocketError);
-    };
-  }, [session, fetchSessionData]);
+  }, [session.responses]);
 
 
-  // Unused function - commenting out for now
-  /*
-  const updateGroupLabel = (groupId: string, label: string) => {
-    socketService.emit('update_group', {
-      groupId,
-      label
-    });
-  };
-  */
 
-  const handleDragStart = (event: DragStartEvent) => {
-    const { active } = event;
-    setActiveId(active.id as string);
-    
-    const response = responses.find(r => r.id === active.id);
-    setDraggedResponse(response || null);
-  };
 
-  // Helper function to calculate overlap percentage between two rectangles
-  const calculateOverlap = (rect1: { x: number; y: number; width: number; height: number }, 
-                          rect2: { x: number; y: number; width: number; height: number }) => {
-    const overlapX = Math.max(0, Math.min(rect1.x + rect1.width, rect2.x + rect2.width) - Math.max(rect1.x, rect2.x));
-    const overlapY = Math.max(0, Math.min(rect1.y + rect1.height, rect2.y + rect2.height) - Math.max(rect1.y, rect2.y));
-    const overlapArea = overlapX * overlapY;
-    const rect1Area = rect1.width * rect1.height;
-    return (overlapArea / rect1Area) * 100;
-  };
+  const ungroupedResponses = responses;
 
-  // Helper function to get top card of a group (topmost position)
-  const getTopCardOfGroup = (groupId: string) => {
-    const groupResponses = responses.filter(r => r.groupId === groupId);
-    if (groupResponses.length === 0) return null;
-    // Top card is the one with smallest Y coordinate (highest on screen)
-    return groupResponses.reduce((top, current) => {
-      return (current.positionY || 0) < (top.positionY || 0) ? current : top;
-    });
-  };
-
-  // Helper function to check if a response is the top card of its group
-  const isTopCard = (response: Response) => {
-    if (!response.groupId) return false;
-    const topCard = getTopCardOfGroup(response.groupId);
-    return topCard?.id === response.id;
-  };
-
-  // Helper function to get consistent boundary constraints
-  const getBoundaryConstraints = () => {
-    const cardWidth = 192;
-    const cardHeight = 120;
-    const canvasElement = document.querySelector('.bg-white.rounded-xl.border-2.border-gray-300') as HTMLElement;
-    const fieldWidth = canvasElement ? canvasElement.clientWidth : 1000;
-    const fieldHeight = canvasElement ? canvasElement.clientHeight : 600;
-    const padding = 24;
-    
-    return {
-      cardWidth,
-      cardHeight,
-      fieldWidth,
-      fieldHeight,
-      padding,
-      minX: padding,
-      minY: padding,
-      maxX: fieldWidth - cardWidth - padding,
-      maxY: fieldHeight - cardHeight - padding
-    };
-  };
-
-  // Helper function to move all cards in a group together
-  const moveGroup = (draggedCardId: string, newX: number, newY: number) => {
-    const draggedCard = responses.find(r => r.id === draggedCardId);
-    if (!draggedCard?.groupId || draggedCard.groupId === 'pending') return;
-
-    const oldX = draggedCard.positionX || 0;
-    const oldY = draggedCard.positionY || 0;
-    
-    // Calculate the delta movement
-    const deltaX = newX - oldX;
-    const deltaY = newY - oldY;
-
-    // Move all cards in the group by the same delta
-    setResponses(prev => prev.map(r => {
-      if (r.groupId === draggedCard.groupId) {
-        const currentX = r.positionX || 0;
-        const currentY = r.positionY || 0;
-        
-        // Apply boundary constraints to each card
-        const bounds = getBoundaryConstraints();
-        const newCardX = Math.max(bounds.minX, Math.min(bounds.maxX, currentX + deltaX));
-        const newCardY = Math.max(bounds.minY, Math.min(bounds.maxY, currentY + deltaY));
-        
-        return { ...r, positionX: newCardX, positionY: newCardY };
-      }
-      return r;
-    }));
-
-    // Emit move event for all cards in the group
-    const groupCards = responses.filter(r => r.groupId === draggedCard.groupId);
-    groupCards.forEach(card => {
-      const currentX = card.positionX || 0;
-      const currentY = card.positionY || 0;
-      
-      // Apply same boundary logic for server sync
-      const bounds = getBoundaryConstraints();
-      const serverX = Math.max(bounds.minX, Math.min(bounds.maxX, currentX + deltaX));
-      const serverY = Math.max(bounds.minY, Math.min(bounds.maxY, currentY + deltaY));
-      
-      socketService.emit('drag_response', {
-        sessionId: session.id,
-        responseId: card.id,
-        x: serverX,
-        y: serverY,
-        groupId: card.groupId
-      });
-    });
-  };
-
-  // Enhanced ungrouping with visual feedback and animation
-  const handleDoubleClick = (responseId: string) => {
-    const response = responses.find(r => r.id === responseId);
-    if (!response || !response.groupId) return;
-
-    // Animate card moving away from group slightly
-    const currentX = response.positionX || 0;
-    const currentY = response.positionY || 0;
-    const offsetX = Math.random() * 60 - 30; // Random offset -30 to 30
-    const offsetY = Math.random() * 60 - 30;
-
-    // Immediate visual feedback with slight position change
-    setResponses(prev => prev.map(r => 
-      r.id === responseId 
-        ? { 
-            ...r, 
-            groupId: null,
-            positionX: Math.max(24, Math.min(800, currentX + offsetX)),
-            positionY: Math.max(24, Math.min(500, currentY + offsetY))
-          }
-        : r
-    ));
-
-    // Then emit to server
-    socketService.emit('ungroup_response', {
-      responseId,
-      sessionId: session.id
-    });
-
-    // Hide ungroup hint
-    setShowUngroupHint(null);
-  };
-
-  // Future enhancement: Bulk ungroup for entire group
-  // const handleBulkUngroup = (groupId: string) => {
-  //   const groupResponses = responses.filter(r => r.groupId === groupId);
-    
-  //   // Immediate visual feedback
-  //   setResponses(prev => prev.map(r => 
-  //     r.groupId === groupId 
-  //       ? { ...r, groupId: null }
-  //       : r
-  //   ));
-
-  //   // Emit for each response
-  //   groupResponses.forEach(response => {
-  //     socketService.emit('ungroup_response', {
-  //       responseId: response.id,
-  //       sessionId: session.id
-  //     });
-  //   });
-  // };
-
-  const handleDragOver = (event: DragOverEvent) => {
-    const { active, over, delta } = event;
-    
-    if (!active || !over || active.id === over.id) {
-      setHoveringOverCard(null);
-      setPotentialGroup(null);
-      setPreviewGroupColor(null);
-      return;
-    }
-
-    const draggedResponse = responses.find(r => r.id === active.id);
-    const targetResponse = responses.find(r => r.id === over.id);
-
-    // Check if dragging over another card
-    const isOverCard = responses.some(r => r.id === over.id);
-    if (isOverCard && targetResponse && draggedResponse) {
-      setHoveringOverCard(over.id as string);
-      
-      // Calculate actual overlap percentage for live feedback
-      if (!draggedResponse.groupId && delta) {
-        const draggedX = (draggedResponse.positionX || 0) + delta.x;
-        const draggedY = (draggedResponse.positionY || 0) + delta.y;
-        const targetX = targetResponse.positionX || 0;
-        const targetY = targetResponse.positionY || 0;
-        
-        const draggedRect = { x: draggedX, y: draggedY, width: 192, height: 120 };
-        const targetRect = { x: targetX, y: targetY, width: 192, height: 120 };
-        
-        const overlapPercent = calculateOverlap(draggedRect, targetRect);
-        
-        if (overlapPercent >= 70) {
-          // Generate a consistent color for this potential group
-          const groupColor = `hsl(${(active.id as string).charCodeAt(0) * 7 % 360}, 70%, 60%)`;
-          setPotentialGroup({
-            target: over.id as string,
-            dragged: active.id as string,
-            overlap: overlapPercent
-          });
-          setPreviewGroupColor(groupColor);
-        } else if (overlapPercent > 30) {
-          // Show potential but not yet valid
-          setPotentialGroup({
-            target: over.id as string,
-            dragged: active.id as string,
-            overlap: overlapPercent
-          });
-          setPreviewGroupColor(null);
-        } else {
-          setPotentialGroup(null);
-          setPreviewGroupColor(null);
-        }
-      } else {
-        setPotentialGroup(null);
-        setPreviewGroupColor(null);
-      }
-    } else {
-      setHoveringOverCard(null);
-      setPotentialGroup(null);
-      setPreviewGroupColor(null);
-    }
-  };
-
-  const handleDragEnd = (event: DragEndEvent) => {
-    const { active, delta } = event;
-    
-    if (!active) {
-      setActiveId(null);
-      setDraggedResponse(null);
-      return;
-    }
-
-    const responseId = active.id as string;
-    const draggedResponse = responses.find(r => r.id === responseId);
-    
-    if (!draggedResponse) {
-      setActiveId(null);
-      setDraggedResponse(null);
-      return;
-    }
-
-    // Calculate the exact cursor position where the card should end up
-    const currentX = draggedResponse.positionX || 0;
-    const currentY = draggedResponse.positionY || 0;
-    
-    // Use delta if available, otherwise fall back to current position
-    let newX = delta ? currentX + delta.x : currentX;
-    let newY = delta ? currentY + delta.y : currentY;
-    
-    // Add boundary constraints using helper function
-    const bounds = getBoundaryConstraints();
-    newX = Math.max(bounds.minX, Math.min(bounds.maxX, newX));
-    newY = Math.max(bounds.minY, Math.min(bounds.maxY, newY));
-
-    // Check if this card is part of a group
-    if (draggedResponse.groupId && draggedResponse.groupId !== 'pending') {
-      // Move the entire group together
-      console.log('Moving group together for card:', draggedResponse.id.slice(-4));
-      moveGroup(responseId, newX, newY);
-    } else {
-      // Move just this single card
-      setResponses(prev => prev.map(r => 
-        r.id === responseId 
-          ? { ...r, positionX: newX, positionY: newY }
-          : r
-      ));
-
-      // Emit single card movement
-      socketService.emit('drag_response', {
-        sessionId: session.id,
-        responseId: responseId,
-        x: newX,
-        y: newY,
-        groupId: null
-      });
-    }
-
-    // Check for 70% overlap with other cards for potential grouping (but only if dragged card is not in a group)
-    if (!draggedResponse.groupId) {
-      const cardRect = { x: newX, y: newY, width: 192, height: 120 };
-      let targetGroupId = null;
-      let overlappingCard = null;
-
-      for (const otherResponse of responses) {
-        if (otherResponse.id === responseId) continue;
-        
-        const otherRect = { 
-          x: otherResponse.positionX || 0, 
-          y: otherResponse.positionY || 0, 
-          width: 192, 
-          height: 120 
-        };
-        
-        const overlapPercent = calculateOverlap(cardRect, otherRect);
-        
-        if (overlapPercent >= 70) {
-          overlappingCard = otherResponse;
-          targetGroupId = otherResponse.groupId;
-          break;
-        }
-      }
-
-      if (overlappingCard) {
-        if (targetGroupId) {
-          // Join existing group
-          setResponses(prev => prev.map(r => 
-            r.id === responseId 
-              ? { ...r, positionX: newX, positionY: newY, groupId: targetGroupId }
-              : r
-          ));
-
-          socketService.emit('drag_response', {
-            sessionId: session.id,
-            responseId: responseId,
-            x: newX,
-            y: newY,
-            groupId: targetGroupId
-          });
-        } else {
-          // Create new group with both cards
-          // The group name will be the content of the top card (higher Z-index/earlier in list)
-          const topCard = newY < (overlappingCard.positionY || 0) ? draggedResponse : overlappingCard;
-          const rawGroupName = topCard.content.trim();
-          const groupName = rawGroupName 
-            ? (rawGroupName.substring(0, 30) + (rawGroupName.length > 30 ? '...' : ''))
-            : 'Grouped Items'; // Fallback name if content is empty
-          
-          // Keep cards exactly where they are - don't move them when grouping
-          setResponses(prev => prev.map(r => {
-            if (r.id === responseId) {
-              console.log('Setting dragged card to pending group:', r.id.slice(-4));
-              return { ...r, positionX: newX, positionY: newY, groupId: 'pending' };
-            }
-            if (r.id === overlappingCard.id) {
-              console.log('Setting target card to pending group:', r.id.slice(-4));
-              return { ...r, groupId: 'pending' };
-            }
-            return r;
-          }));
-
-          // Create group with name from top card
-          const groupData = {
-            sessionId: session.id,
-            label: groupName,
-            color: `hsl(${Math.random() * 360}, 70%, 60%)`,
-            responseIds: [responseId, overlappingCard.id]
-          };
-          
-          console.log('Creating group with data:', {
-            ...groupData,
-            labelLength: groupData.label.length,
-            isConnected: isConnected,
-            socketConnected: socketService.getSocket()?.connected
-          });
-          
-          // Add a timeout to detect if the group creation hangs
-          const groupCreationTimeout = setTimeout(() => {
-            console.error('Group creation timeout - no response from server');
-          }, 5000);
-          
-          // Listen for group creation success to clear timeout
-          const handleGroupCreated = (group: Group) => {
-            clearTimeout(groupCreationTimeout);
-            console.log('Group creation successful:', group.id);
-          };
-          
-          socketService.getSocket()?.once('group_created', handleGroupCreated);
-          socketService.emit('create_group', groupData);
-
-          // Update positions
-          socketService.emit('drag_response', {
-            sessionId: session.id,
-            responseId: responseId,
-            x: newX,
-            y: newY,
-            groupId: null // Will be set by backend after group creation
-          });
-        }
-      } else {
-        // No overlap, just emit the move (state already updated above)
-        socketService.emit('drag_response', {
-          sessionId: session.id,
-          responseId: responseId,
-          x: newX,
-          y: newY,
-          groupId: null
-        });
-      }
-    }
-    // Note: Group movement is handled earlier in the function
-
-    setActiveId(null);
-    setDraggedResponse(null);
-    setHoveringOverCard(null);
-    setPotentialGroup(null);
-    setPreviewGroupColor(null);
-  };
-
-  const ungroupedResponses = responses.filter(r => !r.groupId);
-  // Unused variable - commenting out for now
-  /*
-  const groupedResponses = groups.map(group => ({
-    group,
-    responses: responses.filter(r => r.groupId === group.id)
-  }));
-  */
-
-  console.log('GroupingPhase Debug:', {
-    totalResponses: responses.length,
-    ungroupedResponses: ungroupedResponses.length,
-    groups: groups.length,
-    sessionResponses: session.responses?.length || 0,
-    responsesWithGroups: responses.filter(r => r.groupId).map(r => ({
-      id: r.id.slice(-4),
-      groupId: r.groupId === 'pending' ? 'PENDING' : r.groupId?.slice(-4),
-      content: r.content.slice(0, 20)
-    })),
-    pendingResponses: responses.filter(r => r.groupId === 'pending').length,
-    groupDetails: groups.map(g => ({
-      id: g.id?.slice(-4),
-      label: g.label,
-      color: g.color
-    }))
-  });
 
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="text-center mb-8">
         <h1 className="text-4xl font-bold text-gray-900 mb-2">Grouping Phase</h1>
-        <p className="text-gray-600">Drag related items together to create groups</p>
+        <p className="text-gray-600">Review the responses from the input phase</p>
         
-        <div className="flex justify-center gap-4 mt-4">
-          <div className="text-center max-w-2xl">
-            <div className="bg-blue-50 rounded-lg p-4 mb-4">
-              <p className="text-sm text-gray-700 mb-2">
-                💡 <strong>Tips:</strong>
-              </p>
-              <ul className="text-xs text-gray-600 space-y-1 text-left">
-                <li>• <strong>Group cards:</strong> Drag and drop one card onto another (watch for yellow ✨ indicator)</li>
-                <li>• <strong>Group naming:</strong> Group takes the name from the topmost card (👑 Leader)</li>
-                <li>• <strong>Move groups:</strong> Drag any grouped card to move the entire group together</li>
-                <li>• <strong>Ungroup cards:</strong> Double-click any grouped card (hover to see hint)</li>
-                <li>• <strong>Visual cues:</strong> 🔗 = grouped, 👑 = group leader, ✨ = drop zone</li>
-                <li>• <strong>Shortcuts:</strong> Press Escape to clear selections</li>
-              </ul>
-            </div>
+        {participant.isHost && (
+          <div className="flex gap-3 justify-center mt-4">
+            <button
+              onClick={() => socketService.emit('change_phase', { sessionId: session.id, phase: 'INPUT' })}
+              disabled={!isConnected}
+              className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 disabled:opacity-50 flex items-center gap-2"
+            >
+              ← Back to Input
+            </button>
+            <button
+              onClick={() => socketService.emit('change_phase', { sessionId: session.id, phase: 'VOTING' })}
+              disabled={!isConnected}
+              className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 disabled:opacity-50 flex items-center gap-2"
+            >
+              Move to Voting →
+            </button>
           </div>
-          
-          {participant.isHost && (
-            <div className="flex gap-3">
-              <button
-                onClick={() => socketService.emit('change_phase', { sessionId: session.id, phase: 'INPUT' })}
-                disabled={!isConnected}
-                className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 disabled:opacity-50 flex items-center gap-2"
-              >
-                ← Back to Input
-              </button>
-              <button
-                onClick={() => socketService.emit('change_phase', { sessionId: session.id, phase: 'VOTING' })}
-                disabled={!isConnected}
-                className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 disabled:opacity-50 flex items-center gap-2"
-              >
-                Move to Voting →
-              </button>
-            </div>
-          )}
-        </div>
+        )}
       </div>
 
       {ungroupedResponses.length === 0 ? (
@@ -833,124 +102,30 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
           </button>
         </div>
       ) : (
-        <DndContext
-          sensors={sensors}
-          onDragStart={handleDragStart}
-          onDragOver={handleDragOver}
-          onDragEnd={handleDragEnd}
-        >
-          {/* Main Canvas Area */}
-          <div className="bg-white rounded-xl border-2 border-gray-300 min-h-[600px] relative overflow-auto">
-            <div className="absolute inset-0 p-6">
-              {/* Render all responses positioned absolutely */}
-              {responses.map((response) => {
-                // Create completely independent response object for each render
-                const independentResponse = {
-                  id: response.id,
-                  content: response.content,
-                  category: response.category,
-                  positionX: response.positionX,
-                  positionY: response.positionY,
-                  groupId: response.groupId,
-                  participant: response.participant,
-                  participantId: response.participantId,
-                  sessionId: response.sessionId,
-                  createdAt: response.createdAt,
-                  updatedAt: response.updatedAt
-                };
-                
-                // Generate stable position if none exists - arrange in neat columns
-                const wentWellResponses = responses.filter(r => !r.groupId && r.category === 'WENT_WELL');
-                const didntGoWellResponses = responses.filter(r => !r.groupId && r.category === 'DIDNT_GO_WELL');
-                
-                const getStablePosition = (id: string, axis: 'x' | 'y', category: string) => {
-                  const categoryResponses = category === 'WENT_WELL' ? wentWellResponses : didntGoWellResponses;
-                  const index = categoryResponses.findIndex(r => r.id === id);
-                  
-                  // Use same boundary constraints as drag logic
-                  const bounds = getBoundaryConstraints();
-                  
-                  if (axis === 'x') {
-                    // Create columns: positive cards on left, negative on right
-                    // Ensure positions are within bounds
-                    const leftColumn = Math.max(bounds.minX, 100);
-                    const rightColumn = Math.min(bounds.maxX - 100, bounds.fieldWidth / 2 + 50);
-                    return category === 'WENT_WELL' ? leftColumn : rightColumn;
-                  } else {
-                    // Stack cards vertically in each column with spacing
-                    const baseY = Math.max(bounds.minY, 80);
-                    const spacing = Math.min(130, (bounds.maxY - baseY) / Math.max(categoryResponses.length, 1));
-                    return Math.min(bounds.maxY, baseY + (index * spacing));
-                  }
-                };
-                
-                const isTop = isTopCard(independentResponse);
-                const posX = (independentResponse.positionX && independentResponse.positionX !== 0) 
-                  ? independentResponse.positionX 
-                  : getStablePosition(independentResponse.id, 'x', independentResponse.category);
-                const posY = (independentResponse.positionY && independentResponse.positionY !== 0) 
-                  ? independentResponse.positionY 
-                  : getStablePosition(independentResponse.id, 'y', independentResponse.category);
-                
-                // Check if this card is being hovered over during drag
-                const isHoveredOver = hoveringOverCard === independentResponse.id;
-                const isPotentialTarget = potentialGroup?.target === independentResponse.id;
-                const shouldShowUngroupHint = showUngroupHint === independentResponse.id;
-                
-                // Find the group for this response
-                const responseGroup = independentResponse.groupId 
-                  ? groups.find(g => g.id === independentResponse.groupId) 
-                  : null;
-                
-                // Check if this card is part of a preview group (70% overlap achieved)
-                const isInPreviewGroup = potentialGroup && previewGroupColor && 
-                  (potentialGroup.target === independentResponse.id || potentialGroup.dragged === independentResponse.id) &&
-                  (potentialGroup.overlap || 0) >= 70 && 
-                  !independentResponse.groupId; // Only show preview for ungrouped cards
-                
-                return (
-                  <div
-                    key={`card-${response.id}`} // Simpler unique key
-                    style={{
-                      position: 'absolute',
-                      left: posX,
-                      top: posY,
-                      zIndex: activeId === independentResponse.id ? 100 : (isTop ? 10 : 1),
-                    }}
-                    onMouseEnter={() => {
-                      if (independentResponse.groupId && !activeId) {
-                        setShowUngroupHint(independentResponse.id);
-                      }
-                    }}
-                    onMouseLeave={() => {
-                      setShowUngroupHint(null);
-                    }}
-                  >
-                    <ResponseCard 
-                      response={independentResponse} 
-                      onDoubleClick={() => handleDoubleClick(independentResponse.id)}
-                      isTopCard={isTop}
-                      isHoveredOver={isHoveredOver}
-                      isPotentialGroupTarget={isPotentialTarget}
-                      showUngroupHint={shouldShowUngroupHint}
-                      group={responseGroup}
-                      previewColor={previewGroupColor}
-                      isInPreviewGroup={!!isInPreviewGroup}
-                    />
-                  </div>
-                );
-              })}
-
-              {/* Group boundaries removed to clean up interface */}
+        <div className="bg-white rounded-xl border-2 border-gray-300 min-h-[600px] p-6">
+          <div className="grid md:grid-cols-2 gap-8">
+            <div>
+              <h3 className="text-lg font-semibold text-green-800 mb-4 flex items-center gap-2">
+                😊 What went well?
+              </h3>
+              <div className="space-y-4">
+                {responses.filter(r => r.category === 'WENT_WELL').map((response) => (
+                  <ResponseCard key={response.id} response={response} />
+                ))}
+              </div>
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-red-800 mb-4 flex items-center gap-2">
+                😕 What didn't go well?
+              </h3>
+              <div className="space-y-4">
+                {responses.filter(r => r.category === 'DIDNT_GO_WELL').map((response) => (
+                  <ResponseCard key={response.id} response={response} />
+                ))}
+              </div>
             </div>
           </div>
-
-          <DragOverlay>
-            {activeId && draggedResponse ? (
-              <ResponseCard response={draggedResponse} isDragging />
-            ) : null}
-          </DragOverlay>
-        </DndContext>
+        </div>
       )}
     </div>
   );
