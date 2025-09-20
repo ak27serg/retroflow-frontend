@@ -40,7 +40,7 @@ function ResponseCard({ response, onChainClick, isSelected, centerCoordinates }:
 
       {/* Center coordinates display */}
       <div className="absolute top-1 left-1 bg-gray-800 text-white text-xs px-1.5 py-0.5 rounded font-mono opacity-75">
-        {centerCoordinates.x.toFixed(0)}, {centerCoordinates.y.toFixed(0)}
+        Center: {centerCoordinates.x.toFixed(0)}, {centerCoordinates.y.toFixed(0)}
       </div>
 
       <p className="text-gray-900 text-sm font-medium leading-tight">{response.content}</p>
@@ -221,6 +221,7 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
     return { x: 0, y: 0 };
   };
 
+
   // Component for rendering connection lines
   const ConnectionLines = () => {
     return (
@@ -363,7 +364,7 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
         >
           {/* Cursor coordinates display */}
           <div className="absolute top-4 right-4 bg-gray-100 border border-gray-300 rounded px-3 py-1 text-sm font-mono text-gray-700 z-10">
-            {cursorPosition.x.toFixed(0)}, {cursorPosition.y.toFixed(0)}
+            Cursor: {cursorPosition.x.toFixed(0)}, {cursorPosition.y.toFixed(0)}
           </div>
           
           {/* Connection lines overlay */}
