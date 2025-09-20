@@ -106,8 +106,8 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
       if (canvasRef.current) {
         const rect = canvasRef.current.getBoundingClientRect();
         const newPosition = {
-          x: e.clientX - rect.left,
-          y: e.clientY - rect.top
+          x: e.clientX - rect.left - 24,  // Account for padding
+          y: e.clientY - rect.top - 24   // Account for padding
         };
         setCursorPosition(newPosition);
       }
@@ -154,8 +154,8 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
           const canvasRect = canvasRef.current.getBoundingClientRect();
           const cardRect = cardElement.getBoundingClientRect();
           const centerPosition = {
-            x: cardRect.left - canvasRect.left + cardRect.width / 2,
-            y: cardRect.top - canvasRect.top + cardRect.height / 2
+            x: cardRect.left - canvasRect.left - 24 + cardRect.width / 2,  // Account for padding
+            y: cardRect.top - canvasRect.top - 24 + cardRect.height / 2   // Account for padding
           };
           setSelectedCardPosition(centerPosition);
         }
@@ -194,15 +194,17 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
     if (cardElement && canvasRef.current) {
       const canvasRect = canvasRef.current.getBoundingClientRect();
       const cardRect = cardElement.getBoundingClientRect();
+      // Account for the 24px padding (p-6 class) since SVG is positioned inside the padding area
       const position = {
-        x: cardRect.left - canvasRect.left + cardRect.width / 2,
-        y: cardRect.top - canvasRect.top + cardRect.height / 2
+        x: cardRect.left - canvasRect.left - 24 + cardRect.width / 2,
+        y: cardRect.top - canvasRect.top - 24 + cardRect.height / 2
       };
       console.log('getCardPosition debug:', {
         responseId,
         canvasRect: { left: canvasRect.left, top: canvasRect.top, width: canvasRect.width, height: canvasRect.height },
         cardRect: { left: cardRect.left, top: cardRect.top, width: cardRect.width, height: cardRect.height },
-        calculatedPosition: position
+        calculatedPosition: position,
+        adjustedForPadding: '24px subtracted from x and y'
       });
       return position;
     }
@@ -214,10 +216,17 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
   const ConnectionLines = () => {
     return (
       <svg
-        className="absolute inset-0"
-        style={{ zIndex: 1, pointerEvents: 'none' }}
-        width="100%"
-        height="100%"
+        className="absolute"
+        style={{ 
+          zIndex: 1, 
+          pointerEvents: 'none',
+          left: '24px',
+          top: '24px',
+          right: '24px', 
+          bottom: '24px'
+        }}
+        width="calc(100% - 48px)"
+        height="calc(100% - 48px)"
       >
         {/* Existing connections */}
         {connections.map((connection) => {
