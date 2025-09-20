@@ -284,7 +284,13 @@ export default function InputPhase({ session, participant, isConnected }: InputP
             <textarea
               value={wentWellText}
               onChange={(e) => handleTextChange(e.target.value, 'WENT_WELL')}
-              placeholder="What worked well during this sprint? What should we keep doing?"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  addResponse('WENT_WELL', wentWellText);
+                }
+              }}
+              placeholder="What worked well during this sprint? What should we keep doing? (Press Enter to submit, Shift+Enter for new line)"
               className="w-full h-40 p-4 border border-green-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent resize-none text-gray-900 placeholder-gray-500"
             />
             <button 
@@ -316,6 +322,12 @@ export default function InputPhase({ session, participant, isConnected }: InputP
                               sessionId: session.id,
                               participantId: participant.id
                             });
+                          }
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && !e.shiftKey) {
+                            e.preventDefault();
+                            saveEdit();
                           }
                         }}
                         className="w-full p-2 border border-green-300 rounded text-gray-900 placeholder-gray-500 resize-none"
@@ -369,7 +381,13 @@ export default function InputPhase({ session, participant, isConnected }: InputP
             <textarea
               value={didntGoWellText}
               onChange={(e) => handleTextChange(e.target.value, 'DIDNT_GO_WELL')}
-              placeholder="What challenges did we face? What should we improve or stop doing?"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  addResponse('DIDNT_GO_WELL', didntGoWellText);
+                }
+              }}
+              placeholder="What challenges did we face? What should we improve or stop doing? (Press Enter to submit, Shift+Enter for new line)"
               className="w-full h-40 p-4 border border-red-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent resize-none text-gray-900 placeholder-gray-500"
             />
             <button 
@@ -401,6 +419,12 @@ export default function InputPhase({ session, participant, isConnected }: InputP
                               sessionId: session.id,
                               participantId: participant.id
                             });
+                          }
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && !e.shiftKey) {
+                            e.preventDefault();
+                            saveEdit();
                           }
                         }}
                         className="w-full p-2 border border-red-300 rounded text-gray-900 placeholder-gray-500 resize-none"
