@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Session, Participant, Response } from '@/lib/api';
+import { useState, useEffect, useRef } from 'react';
+import { Session, Participant, Response, Connection } from '@/lib/api';
 import { socketService } from '@/lib/socket';
 
 interface GroupingPhaseProps {
@@ -12,17 +12,31 @@ interface GroupingPhaseProps {
 
 interface ResponseCardProps {
   response: Response;
+  onChainClick: (responseId: string) => void;
+  isSelected: boolean;
 }
 
-function ResponseCard({ response }: ResponseCardProps) {
+function ResponseCard({ response, onChainClick, isSelected }: ResponseCardProps) {
   return (
     <div
       className={`p-3 rounded-lg border-2 shadow-sm transition-all duration-200 w-48 relative ${
         response.category === 'WENT_WELL'
           ? 'bg-green-50 border-green-300'
           : 'bg-red-50 border-red-300'
-      }`}
+      } ${isSelected ? 'ring-2 ring-green-500 ring-offset-2' : ''}`}
     >
+      {/* Chain icon in top right corner */}
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          onChainClick(response.id);
+        }}
+        className="absolute -top-2 -right-2 w-6 h-6 bg-white border-2 border-gray-300 rounded-full flex items-center justify-center hover:bg-gray-50 hover:border-gray-400 transition-colors shadow-sm"
+        title="Connect to another card"
+      >
+        <span className="text-xs">🔗</span>
+      </button>
+
       <p className="text-gray-900 text-sm font-medium leading-tight">{response.content}</p>
       <div className="flex items-center gap-2 mt-2 text-xs text-gray-600">
         <span>{response.participant?.avatarId}</span>
@@ -44,6 +58,12 @@ function ResponseCard({ response }: ResponseCardProps) {
 
 export default function GroupingPhase({ session, participant, isConnected }: GroupingPhaseProps) {
   const [responses, setResponses] = useState<Response[]>([]);
+  const [connections, setConnections] = useState<Connection[]>([]);
+  const [isDrawingConnection, setIsDrawingConnection] = useState(false);
+  const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
+  const [cursorPosition, setCursorPosition] = useState({ x: 0, y: 0 });
+  const [selectedCardPosition, setSelectedCardPosition] = useState({ x: 0, y: 0 });
+  const canvasRef = useRef<HTMLDivElement>(null);
 
 
 
@@ -53,7 +73,185 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
     if (session.responses) {
       setResponses(session.responses);
     }
-  }, [session.responses]);
+    if (session.connections) {
+      setConnections(session.connections);
+    }
+  }, [session.responses, session.connections]);
+
+  // Socket event listeners for real-time connections
+  useEffect(() => {
+    const socket = socketService.getSocket();
+    if (!socket) return;
+
+    const handleConnectionCreated = (connection: Connection) => {
+      setConnections(prev => [...prev, connection]);
+    };
+
+    const handleConnectionRemoved = (data: { connectionId: string }) => {
+      setConnections(prev => prev.filter(conn => conn.id !== data.connectionId));
+    };
+
+    socket.on('connection_created', handleConnectionCreated);
+    socket.on('connection_removed', handleConnectionRemoved);
+
+    return () => {
+      socket.off('connection_created', handleConnectionCreated);
+      socket.off('connection_removed', handleConnectionRemoved);
+    };
+  }, []);
+
+  // Mouse tracking for drawing connection lines
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (isDrawingConnection && canvasRef.current) {
+        const rect = canvasRef.current.getBoundingClientRect();
+        setCursorPosition({
+          x: e.clientX - rect.left,
+          y: e.clientY - rect.top
+        });
+      }
+    };
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isDrawingConnection) {
+        setIsDrawingConnection(false);
+        setSelectedCardId(null);
+      }
+    };
+
+    if (isDrawingConnection) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('keydown', handleKeyDown);
+    }
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isDrawingConnection]);
+
+  const handleChainClick = (responseId: string) => {
+    if (isDrawingConnection && selectedCardId) {
+      // If we're already drawing and click on a different card, create connection
+      if (selectedCardId !== responseId) {
+        createConnection(selectedCardId, responseId);
+      }
+      // Reset drawing state
+      setIsDrawingConnection(false);
+      setSelectedCardId(null);
+    } else {
+      // Start drawing a connection
+      setSelectedCardId(responseId);
+      setIsDrawingConnection(true);
+      
+      // Get the position of the selected card
+      const cardElement = document.querySelector(`[data-response-id="${responseId}"]`) as HTMLElement;
+      if (cardElement && canvasRef.current) {
+        const canvasRect = canvasRef.current.getBoundingClientRect();
+        const cardRect = cardElement.getBoundingClientRect();
+        setSelectedCardPosition({
+          x: cardRect.left - canvasRect.left + cardRect.width / 2,
+          y: cardRect.top - canvasRect.top + cardRect.height / 2
+        });
+      }
+    }
+  };
+
+  const createConnection = (fromId: string, toId: string) => {
+    // Check if connection already exists
+    const exists = connections.some(conn => 
+      (conn.fromResponseId === fromId && conn.toResponseId === toId) ||
+      (conn.fromResponseId === toId && conn.toResponseId === fromId)
+    );
+
+    if (!exists) {
+      // Emit to backend
+      socketService.emit('create_connection', {
+        sessionId: session.id,
+        fromResponseId: fromId,
+        toResponseId: toId
+      });
+    }
+  };
+
+  const removeConnection = (connectionId: string) => {
+    // Emit to backend
+    socketService.emit('remove_connection', {
+      sessionId: session.id,
+      connectionId: connectionId
+    });
+  };
+
+  const getCardPosition = (responseId: string) => {
+    const cardElement = document.querySelector(`[data-response-id="${responseId}"]`) as HTMLElement;
+    if (cardElement && canvasRef.current) {
+      const canvasRect = canvasRef.current.getBoundingClientRect();
+      const cardRect = cardElement.getBoundingClientRect();
+      return {
+        x: cardRect.left - canvasRect.left + cardRect.width / 2,
+        y: cardRect.top - canvasRect.top + cardRect.height / 2
+      };
+    }
+    return { x: 0, y: 0 };
+  };
+
+  // Component for rendering connection lines
+  const ConnectionLines = () => {
+    return (
+      <svg
+        className="absolute inset-0 pointer-events-none"
+        style={{ zIndex: 1 }}
+      >
+        {/* Existing connections */}
+        {connections.map((connection) => {
+          const fromPos = getCardPosition(connection.fromResponseId);
+          const toPos = getCardPosition(connection.toResponseId);
+          
+          return (
+            <g key={connection.id}>
+              <line
+                x1={fromPos.x}
+                y1={fromPos.y}
+                x2={toPos.x}
+                y2={toPos.y}
+                stroke="#10b981"
+                strokeWidth="3"
+                className="cursor-pointer"
+                onClick={() => removeConnection(connection.id)}
+                style={{ pointerEvents: 'stroke' }}
+              />
+              {/* Add a small circle at the midpoint for easier clicking */}
+              <circle
+                cx={(fromPos.x + toPos.x) / 2}
+                cy={(fromPos.y + toPos.y) / 2}
+                r="6"
+                fill="#10b981"
+                className="cursor-pointer"
+                onClick={() => removeConnection(connection.id)}
+                style={{ pointerEvents: 'all' }}
+              >
+                <title>Click to remove connection</title>
+              </circle>
+            </g>
+          );
+        })}
+        
+        {/* Drawing line following cursor */}
+        {isDrawingConnection && selectedCardId && (
+          <line
+            x1={selectedCardPosition.x}
+            y1={selectedCardPosition.y}
+            x2={cursorPosition.x}
+            y2={cursorPosition.y}
+            stroke="#10b981"
+            strokeWidth="3"
+            strokeDasharray="5,5"
+            className="pointer-events-none"
+          />
+        )}
+      </svg>
+    );
+  };
 
 
 
@@ -102,15 +300,27 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
           </button>
         </div>
       ) : (
-        <div className="bg-white rounded-xl border-2 border-gray-300 min-h-[600px] p-6">
-          <div className="grid md:grid-cols-2 gap-8">
+        <div 
+          ref={canvasRef}
+          className="bg-white rounded-xl border-2 border-gray-300 min-h-[600px] p-6 relative"
+        >
+          {/* Connection lines overlay */}
+          <ConnectionLines />
+          
+          <div className="grid md:grid-cols-2 gap-8 relative" style={{ zIndex: 2 }}>
             <div>
               <h3 className="text-lg font-semibold text-green-800 mb-4 flex items-center gap-2">
                 😊 What went well?
               </h3>
               <div className="space-y-4">
                 {responses.filter(r => r.category === 'WENT_WELL').map((response) => (
-                  <ResponseCard key={response.id} response={response} />
+                  <div key={response.id} data-response-id={response.id}>
+                    <ResponseCard 
+                      response={response} 
+                      onChainClick={handleChainClick}
+                      isSelected={selectedCardId === response.id}
+                    />
+                  </div>
                 ))}
               </div>
             </div>
@@ -120,11 +330,24 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
               </h3>
               <div className="space-y-4">
                 {responses.filter(r => r.category === 'DIDNT_GO_WELL').map((response) => (
-                  <ResponseCard key={response.id} response={response} />
+                  <div key={response.id} data-response-id={response.id}>
+                    <ResponseCard 
+                      response={response} 
+                      onChainClick={handleChainClick}
+                      isSelected={selectedCardId === response.id}
+                    />
+                  </div>
                 ))}
               </div>
             </div>
           </div>
+          
+          {/* Instructions when drawing */}
+          {isDrawingConnection && (
+            <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-green-100 border border-green-300 rounded-lg px-4 py-2 text-sm text-green-800 z-10">
+              Click on another card to connect, or press Escape to cancel
+            </div>
+          )}
         </div>
       )}
     </div>

@@ -27,6 +27,7 @@ export interface Session {
   responses?: Response[];
   groups?: Group[];
   votes?: Vote[];
+  connections?: Connection[];
 }
 
 export interface Participant {
@@ -76,6 +77,14 @@ export interface Vote {
   participantId: string;
   groupId: string;
   voteCount: number;
+  createdAt: string;
+}
+
+export interface Connection {
+  id: string;
+  sessionId: string;
+  fromResponseId: string;
+  toResponseId: string;
   createdAt: string;
 }
 
