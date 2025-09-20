@@ -279,6 +279,7 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
                 strokeWidth="3"
                 fill="none"
                 className="cursor-pointer"
+                style={{ pointerEvents: 'stroke' }}
                 onClick={(e) => {
                   console.log('Path clicked!', connection.id);
                   e.stopPropagation();
@@ -292,6 +293,7 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
                 r="6"
                 fill="#10b981"
                 className="cursor-pointer"
+                style={{ pointerEvents: 'all' }}
                 onClick={(e) => {
                   console.log('Circle clicked!', connection.id);
                   e.stopPropagation();
