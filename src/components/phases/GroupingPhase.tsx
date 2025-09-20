@@ -100,15 +100,16 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
     };
   }, []);
 
-  // Mouse tracking for drawing connection lines
+  // Mouse tracking for drawing connection lines and cursor coordinates
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
-      if (isDrawingConnection && canvasRef.current) {
+      if (canvasRef.current) {
         const rect = canvasRef.current.getBoundingClientRect();
-        setCursorPosition({
+        const newPosition = {
           x: e.clientX - rect.left,
           y: e.clientY - rect.top
-        });
+        };
+        setCursorPosition(newPosition);
       }
     };
 
@@ -119,8 +120,10 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
       }
     };
 
+    // Always track mouse movement when over the canvas area
+    document.addEventListener('mousemove', handleMouseMove);
+    
     if (isDrawingConnection) {
-      document.addEventListener('mousemove', handleMouseMove);
       document.addEventListener('keydown', handleKeyDown);
     }
 
@@ -309,6 +312,11 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
           ref={canvasRef}
           className="bg-white rounded-xl border-2 border-gray-300 min-h-[600px] p-6 relative"
         >
+          {/* Cursor coordinates display */}
+          <div className="absolute top-4 right-4 bg-gray-100 border border-gray-300 rounded px-3 py-1 text-sm font-mono text-gray-700 z-10">
+            {cursorPosition.x.toFixed(0)}, {cursorPosition.y.toFixed(0)}
+          </div>
+          
           {/* Connection lines overlay */}
           <ConnectionLines />
           
