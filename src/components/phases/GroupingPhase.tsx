@@ -144,16 +144,19 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
       setSelectedCardId(responseId);
       setIsDrawingConnection(true);
       
-      // Get the position of the selected card
-      const cardElement = document.querySelector(`[data-response-id="${responseId}"]`) as HTMLElement;
-      if (cardElement && canvasRef.current) {
-        const canvasRect = canvasRef.current.getBoundingClientRect();
-        const cardRect = cardElement.getBoundingClientRect();
-        setSelectedCardPosition({
-          x: cardRect.left - canvasRect.left + cardRect.width / 2,
-          y: cardRect.top - canvasRect.top + cardRect.height / 2
-        });
-      }
+      // Get the position of the selected card with a small delay to ensure element is rendered
+      setTimeout(() => {
+        const cardElement = document.querySelector(`[data-response-id="${responseId}"]`) as HTMLElement;
+        if (cardElement && canvasRef.current) {
+          const canvasRect = canvasRef.current.getBoundingClientRect();
+          const cardRect = cardElement.getBoundingClientRect();
+          const centerPosition = {
+            x: cardRect.left - canvasRect.left + cardRect.width / 2,
+            y: cardRect.top - canvasRect.top + cardRect.height / 2
+          };
+          setSelectedCardPosition(centerPosition);
+        }
+      }, 10);
     }
   };
 
@@ -187,11 +190,13 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
     if (cardElement && canvasRef.current) {
       const canvasRect = canvasRef.current.getBoundingClientRect();
       const cardRect = cardElement.getBoundingClientRect();
-      return {
+      const position = {
         x: cardRect.left - canvasRect.left + cardRect.width / 2,
         y: cardRect.top - canvasRect.top + cardRect.height / 2
       };
+      return position;
     }
+    console.warn('Card element not found for responseId:', responseId);
     return { x: 0, y: 0 };
   };
 
