@@ -277,14 +277,30 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
               <path
                 d={pathData}
                 stroke="transparent"
-                strokeWidth="12"
+                strokeWidth="16"
                 fill="none"
-                className="cursor-pointer"
+                className="cursor-pointer hover:stroke-red-200"
                 style={{ pointerEvents: 'stroke' }}
                 onClick={(e) => {
                   console.log('Path clicked!', connection.id);
                   e.stopPropagation();
                   removeConnection(connection.id);
+                }}
+                onMouseEnter={(e) => {
+                  // Add visual feedback on hover
+                  const visiblePath = e.currentTarget.nextElementSibling as SVGPathElement;
+                  if (visiblePath) {
+                    visiblePath.style.stroke = '#ef4444'; // Red color on hover
+                    visiblePath.style.strokeWidth = '4';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  // Restore original appearance
+                  const visiblePath = e.currentTarget.nextElementSibling as SVGPathElement;
+                  if (visiblePath) {
+                    visiblePath.style.stroke = '#10b981'; // Original green
+                    visiblePath.style.strokeWidth = '3';
+                  }
                 }}
               />
               {/* Visible path */}
@@ -293,7 +309,7 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
                 stroke="#10b981"
                 strokeWidth="3"
                 fill="none"
-                className="cursor-pointer"
+                className="cursor-pointer transition-all duration-200"
                 style={{ pointerEvents: 'none' }}
               />
             </g>
@@ -312,15 +328,6 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
               strokeWidth="3"
               strokeDasharray="5,5"
               style={{ pointerEvents: 'none' }}
-            />
-            {/* Debug circle to show where drawing line starts */}
-            <circle 
-              cx={selectedCardPosition.x} 
-              cy={selectedCardPosition.y} 
-              r="10" 
-              fill="#ff00ff" 
-              opacity="0.7" 
-              style={{ pointerEvents: 'none' }} 
             />
           </>
         )}
@@ -418,10 +425,14 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
             </div>
           </div>
           
-          {/* Instructions when drawing */}
-          {isDrawingConnection && (
+          {/* Instructions */}
+          {isDrawingConnection ? (
             <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-green-100 border border-green-300 rounded-lg px-4 py-2 text-sm text-green-800 z-10">
               Click on another card to connect, or press Escape to cancel
+            </div>
+          ) : connections.length > 0 && (
+            <div className="absolute top-4 right-4 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 text-xs text-blue-700 z-10">
+              💡 Click on connection lines to remove them
             </div>
           )}
         </div>
