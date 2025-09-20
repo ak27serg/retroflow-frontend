@@ -63,8 +63,6 @@ function ResponseCard({ response, onChainClick, isSelected, centerCoordinates }:
 
 
 export default function GroupingPhase({ session, participant, isConnected }: GroupingPhaseProps) {
-  // Canvas padding from p-6 Tailwind class (1.5rem = 24px)
-  const CANVAS_PADDING = 24;
   
   const [responses, setResponses] = useState<Response[]>([]);
   const [connections, setConnections] = useState<Connection[]>([]);
@@ -115,8 +113,8 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
       if (canvasRef.current) {
         const rect = canvasRef.current.getBoundingClientRect();
         const newPosition = {
-          x: e.clientX - rect.left - CANVAS_PADDING,
-          y: e.clientY - rect.top - CANVAS_PADDING
+          x: e.clientX - rect.left,
+          y: e.clientY - rect.top
         };
         setCursorPosition(newPosition);
       }
@@ -163,8 +161,8 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
           const canvasRect = canvasRef.current.getBoundingClientRect();
           const cardRect = cardElement.getBoundingClientRect();
           const centerPosition = {
-            x: cardRect.left - canvasRect.left - CANVAS_PADDING + cardRect.width / 2,
-            y: cardRect.top - canvasRect.top - CANVAS_PADDING + cardRect.height / 2
+            x: cardRect.left - canvasRect.left + cardRect.width / 2,
+            y: cardRect.top - canvasRect.top + cardRect.height / 2
           };
           setSelectedCardPosition(centerPosition);
         }
@@ -198,24 +196,23 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
     });
   };
 
-  // Get card position for SVG line drawing (relative to white field)
+  // Get card position for SVG line drawing (global coordinates relative to canvas)
   const getCardPosition = (responseId: string) => {
     const cardElement = document.querySelector(`[data-response-id="${responseId}"]`) as HTMLElement;
     if (cardElement && canvasRef.current) {
       const canvasRect = canvasRef.current.getBoundingClientRect();
       const cardRect = cardElement.getBoundingClientRect();
-      // Account for canvas padding since SVG is positioned inside the padding area
+      // Global coordinates relative to canvas (including padding area)
       const position = {
-        x: cardRect.left - canvasRect.left - CANVAS_PADDING + cardRect.width / 2,
-        y: cardRect.top - canvasRect.top - CANVAS_PADDING + cardRect.height / 2
+        x: cardRect.left - canvasRect.left + cardRect.width / 2,
+        y: cardRect.top - canvasRect.top + cardRect.height / 2
       };
       console.log('getCardPosition debug:', {
         responseId,
         canvasRect: { left: canvasRect.left, top: canvasRect.top, width: canvasRect.width, height: canvasRect.height },
         cardRect: { left: cardRect.left, top: cardRect.top, width: cardRect.width, height: cardRect.height },
         calculatedPosition: position,
-        adjustedForPadding: `${CANVAS_PADDING}px subtracted from x and y`,
-        coordinateSystem: 'relative to white field content area (inside padding)'
+        coordinateSystem: 'global coordinates relative to canvas (including padding)'
       });
       return position;
     }
@@ -229,17 +226,13 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
   const ConnectionLines = () => {
     return (
       <svg
-        className="absolute"
+        className="absolute inset-0"
         style={{ 
           zIndex: 1, 
-          pointerEvents: 'none',
-          left: `${CANVAS_PADDING}px`,
-          top: `${CANVAS_PADDING}px`,
-          right: `${CANVAS_PADDING}px`, 
-          bottom: `${CANVAS_PADDING}px`
+          pointerEvents: 'none'
         }}
-        width={`calc(100% - ${CANVAS_PADDING * 2}px)`}
-        height={`calc(100% - ${CANVAS_PADDING * 2}px)`}
+        width="100%"
+        height="100%"
       >
         {/* Existing connections */}
         {connections.map((connection) => {
