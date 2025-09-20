@@ -198,6 +198,7 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
     });
   };
 
+  // Get card position for SVG line drawing (relative to white field)
   const getCardPosition = (responseId: string) => {
     const cardElement = document.querySelector(`[data-response-id="${responseId}"]`) as HTMLElement;
     if (cardElement && canvasRef.current) {
@@ -213,13 +214,15 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
         canvasRect: { left: canvasRect.left, top: canvasRect.top, width: canvasRect.width, height: canvasRect.height },
         cardRect: { left: cardRect.left, top: cardRect.top, width: cardRect.width, height: cardRect.height },
         calculatedPosition: position,
-        adjustedForPadding: `${CANVAS_PADDING}px subtracted from x and y`
+        adjustedForPadding: `${CANVAS_PADDING}px subtracted from x and y`,
+        coordinateSystem: 'relative to white field content area (inside padding)'
       });
       return position;
     }
     console.warn('Card element not found for responseId:', responseId);
     return { x: 0, y: 0 };
   };
+
 
 
   // Component for rendering connection lines
