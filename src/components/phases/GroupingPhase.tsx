@@ -690,18 +690,33 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
           }));
 
           // Create group with name from top card
-          console.log('Creating group:', {
-            groupName,
-            sessionId: session.id,
-            responseIds: [responseId, overlappingCard.id]
-          });
-          
-          socketService.emit('create_group', {
+          const groupData = {
             sessionId: session.id,
             label: groupName,
             color: `hsl(${Math.random() * 360}, 70%, 60%)`,
             responseIds: [responseId, overlappingCard.id]
+          };
+          
+          console.log('Creating group with data:', {
+            ...groupData,
+            labelLength: groupData.label.length,
+            isConnected: isConnected,
+            socketConnected: socketService.getSocket()?.connected
           });
+          
+          // Add a timeout to detect if the group creation hangs
+          const groupCreationTimeout = setTimeout(() => {
+            console.error('Group creation timeout - no response from server');
+          }, 5000);
+          
+          // Listen for group creation success to clear timeout
+          const handleGroupCreated = (group: Group) => {
+            clearTimeout(groupCreationTimeout);
+            console.log('Group creation successful:', group.id);
+          };
+          
+          socketService.getSocket()?.once('group_created', handleGroupCreated);
+          socketService.emit('create_group', groupData);
 
           // Update positions
           socketService.emit('drag_response', {

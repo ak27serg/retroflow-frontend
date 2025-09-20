@@ -48,9 +48,14 @@ class SocketService {
 
   emit(event: string, data: unknown): void {
     if (this.socket && this.socket.connected) {
+      console.log(`Emitting socket event: ${event}`, data);
       this.socket.emit(event, data);
     } else {
-      console.warn('Socket not connected, cannot emit event:', event);
+      console.error('Socket not connected, cannot emit event:', event, {
+        hasSocket: !!this.socket,
+        isConnected: this.socket?.connected,
+        socketId: this.socket?.id
+      });
     }
   }
 
