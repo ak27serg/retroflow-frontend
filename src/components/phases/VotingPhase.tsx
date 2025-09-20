@@ -116,12 +116,22 @@ export default function VotingPhase({ session, participant, isConnected }: Votin
     const socket = socketService.getSocket();
     if (!socket) return;
 
-    const handleVotesUpdated = (data: { groupId: string; totalVotes: number }) => {
+    const handleVotesUpdated = (data: { groupId: string; totalVotes: number; participantProgress?: Record<string, number> }) => {
       setGroups(prev => prev.map(group => 
         group.id === data.groupId 
           ? { ...group, voteCount: data.totalVotes }
           : group
       ));
+
+      // Update participant voting progress if provided
+      if (data.participantProgress && participant.isHost) {
+        const progressMap = new Map<string, number>();
+        Object.entries(data.participantProgress).forEach(([participantId, remainingVotes]) => {
+          progressMap.set(participantId, remainingVotes);
+        });
+        setParticipantVotingProgress(progressMap);
+        console.log('VotingPhase: Updated participant progress from socket event:', data.participantProgress);
+      }
     };
 
     socket.on('votes_updated', handleVotesUpdated);
@@ -131,38 +141,7 @@ export default function VotingPhase({ session, participant, isConnected }: Votin
     };
   }, [session, participant.id]);
 
-  // Add an effect to refresh session data when votes are updated
-  useEffect(() => {
-    if (!participant.isHost) return;
-
-    const socket = socketService.getSocket();
-    if (!socket) return;
-
-    const handleVotesUpdatedForProgress = () => {
-      // For real-time updates, we need to fetch the latest session data
-      // This is a simplified approach - in production, we'd want the backend to send updated vote data
-      if (session.votes && session.participants) {
-        // Recalculate progress based on the current session data
-        // Note: This won't be perfectly real-time without backend vote data
-        const progressMap = new Map<string, number>();
-        
-        session.participants.forEach(p => {
-          const participantVotes = session.votes?.filter(vote => vote.participantId === p.id) || [];
-          const totalUsedVotes = participantVotes.reduce((sum, vote) => sum + vote.voteCount, 0);
-          const remainingVotes = 4 - totalUsedVotes;
-          progressMap.set(p.id, remainingVotes);
-        });
-        
-        setParticipantVotingProgress(progressMap);
-      }
-    };
-
-    socket.on('votes_updated', handleVotesUpdatedForProgress);
-
-    return () => {
-      socket.off('votes_updated', handleVotesUpdatedForProgress);
-    };
-  }, [participant.isHost, session.votes, session.participants]);
+  // Note: Real-time progress updates are now handled in the main handleVotesUpdated function above
 
   const castVote = async (groupId: string, voteCount: number) => {
     if (!isConnected || isSubmitting) return;
