@@ -18,6 +18,7 @@ export default function VotingPhase({ session, participant, isConnected }: Votin
   const [groups, setGroups] = useState<VotableGroup[]>([]);
   const [remainingVotes, setRemainingVotes] = useState(4);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [participantVotingProgress, setParticipantVotingProgress] = useState<Map<string, number>>(new Map());
 
   useEffect(() => {
     // Create votable groups from actual groups AND individual cards
@@ -76,6 +77,20 @@ export default function VotingPhase({ session, participant, isConnected }: Votin
       setRemainingVotes(4 - totalUsedVotes);
     }
 
+    // Calculate voting progress for all participants (for host visibility)
+    if (participant.isHost && session.votes && session.participants) {
+      const progressMap = new Map<string, number>();
+      
+      session.participants.forEach(p => {
+        const participantVotes = session.votes?.filter(vote => vote.participantId === p.id) || [];
+        const totalUsedVotes = participantVotes.reduce((sum, vote) => sum + vote.voteCount, 0);
+        const remainingVotes = 4 - totalUsedVotes;
+        progressMap.set(p.id, remainingVotes);
+      });
+      
+      setParticipantVotingProgress(progressMap);
+    }
+
     // Listen for vote updates
     const socket = socketService.getSocket();
     if (!socket) return;
@@ -94,6 +109,39 @@ export default function VotingPhase({ session, participant, isConnected }: Votin
       socket.off('votes_updated', handleVotesUpdated);
     };
   }, [session, participant.id]);
+
+  // Add an effect to refresh session data when votes are updated
+  useEffect(() => {
+    if (!participant.isHost) return;
+
+    const socket = socketService.getSocket();
+    if (!socket) return;
+
+    const handleVotesUpdatedForProgress = () => {
+      // For real-time updates, we need to fetch the latest session data
+      // This is a simplified approach - in production, we'd want the backend to send updated vote data
+      if (session.votes && session.participants) {
+        // Recalculate progress based on the current session data
+        // Note: This won't be perfectly real-time without backend vote data
+        const progressMap = new Map<string, number>();
+        
+        session.participants.forEach(p => {
+          const participantVotes = session.votes?.filter(vote => vote.participantId === p.id) || [];
+          const totalUsedVotes = participantVotes.reduce((sum, vote) => sum + vote.voteCount, 0);
+          const remainingVotes = 4 - totalUsedVotes;
+          progressMap.set(p.id, remainingVotes);
+        });
+        
+        setParticipantVotingProgress(progressMap);
+      }
+    };
+
+    socket.on('votes_updated', handleVotesUpdatedForProgress);
+
+    return () => {
+      socket.off('votes_updated', handleVotesUpdatedForProgress);
+    };
+  }, [participant.isHost, session.votes, session.participants]);
 
   const castVote = async (groupId: string, voteCount: number) => {
     if (!isConnected || isSubmitting) return;
@@ -192,7 +240,56 @@ export default function VotingPhase({ session, participant, isConnected }: Votin
         </div>
       </div>
 
-      <div className="max-w-4xl mx-auto">
+      <div className="max-w-6xl mx-auto">
+        <div className="flex gap-8 items-start">
+          {/* Voting Progress - visible to host only */}
+          {participant.isHost && (
+            <div className="flex-shrink-0 w-64">
+              {session.participants && session.participants.length > 1 && (
+                <div className="p-4 bg-purple-50 border border-purple-200 rounded-lg">
+                  <h3 className="text-sm font-semibold text-purple-800 mb-3 flex items-center gap-2">
+                    🗳️ Voting Progress
+                  </h3>
+                  <div className="space-y-2">
+                    {session.participants
+                      .filter(p => !p.isHost) // Exclude host from progress tracking
+                      .map(p => {
+                        const remainingVotes = participantVotingProgress.get(p.id) ?? 4;
+                        const usedVotes = 4 - remainingVotes;
+                        return (
+                          <div key={p.id} className="text-xs">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="text-lg">{p.avatarId}</span>
+                              <span className="text-purple-700 font-medium">{p.displayName}</span>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <div className="flex gap-1">
+                                {[1, 2, 3, 4].map((vote) => (
+                                  <div
+                                    key={vote}
+                                    className={`w-3 h-3 rounded-full ${
+                                      vote <= usedVotes
+                                        ? 'bg-purple-500'
+                                        : 'bg-gray-200'
+                                    }`}
+                                  />
+                                ))}
+                              </div>
+                              <span className="text-purple-600 ml-2 font-medium">
+                                {remainingVotes} left
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Main voting content */}
+          <div className="flex-1">
         {displayGroups.length === 0 ? (
           <div className="text-center py-12">
             <div className="text-6xl mb-4">📦</div>
@@ -294,6 +391,8 @@ export default function VotingPhase({ session, participant, isConnected }: Votin
             ))}
           </div>
         )}
+          </div>
+        </div>
       </div>
     </div>
   );

@@ -22,19 +22,23 @@ export default function ResultsPhase({ session, participant }: ResultsPhaseProps
   useEffect(() => {
     // Listen for presentation mode events
     const socket = socketService.getSocket();
+    console.log('ResultsPhase: Setting up presentation event listeners, socket:', !!socket);
     if (!socket) return;
 
     const handlePresentationStart = () => {
+      console.log('Presentation started event received');
       setIsInPresentation(true);
       setCurrentItemIndex(0);
     };
 
     const handlePresentationEnd = () => {
+      console.log('Presentation ended event received');
       setIsInPresentation(false);
       setCurrentItemIndex(0);
     };
 
     const handlePresentationNavigate = (data: { itemIndex: number }) => {
+      console.log('Presentation navigate event received:', data.itemIndex);
       setCurrentItemIndex(data.itemIndex);
     };
 
@@ -137,6 +141,7 @@ export default function ResultsPhase({ session, participant }: ResultsPhaseProps
 
   const startPresentation = () => {
     if (!participant.isHost) return;
+    console.log('Host starting presentation, emitting start_presentation event');
     setPresentationMode(true);
     setIsInPresentation(true);
     setCurrentItemIndex(0);
@@ -407,6 +412,7 @@ export default function ResultsPhase({ session, participant }: ResultsPhaseProps
             </button>
           </div>
         )}
+
 
         {/* Host navigation */}
         {participant.isHost && (
