@@ -234,19 +234,6 @@ export default function InputPhase({ session, participant, isConnected }: InputP
           </div>
         )}
         
-        {/* Typing indicators - visible to host only */}
-        {participant.isHost && getTypingParticipants().length > 0 && (
-          <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg max-w-md mx-auto">
-            <div className="flex items-center gap-2">
-              <div className="animate-pulse text-blue-600">✍️</div>
-              <span className="text-sm text-blue-700">
-                {getTypingParticipants().map(p => `${p?.avatarId} ${p?.displayName}`).join(', ')} 
-                {getTypingParticipants().length === 1 ? 'is' : 'are'} typing...
-              </span>
-            </div>
-          </div>
-        )}
-        
         {participant.isHost && (
           <div className="mt-4">
             <div className="flex gap-3 justify-center">
@@ -269,8 +256,27 @@ export default function InputPhase({ session, participant, isConnected }: InputP
         )}
       </div>
       
-      <div className="max-w-4xl mx-auto">
-        <div className="grid md:grid-cols-2 gap-8">
+      <div className="max-w-6xl mx-auto">
+        <div className="flex gap-8 items-start">
+          {/* Typing indicators - visible to host only */}
+          {participant.isHost && (
+            <div className="flex-shrink-0 w-64">
+              {getTypingParticipants().length > 0 && (
+                <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                  <div className="flex items-center gap-2">
+                    <div className="animate-pulse text-blue-600">✍️</div>
+                    <span className="text-sm text-blue-700">
+                      {getTypingParticipants().map(p => `${p?.avatarId} ${p?.displayName}`).join(', ')} 
+                      {getTypingParticipants().length === 1 ? 'is' : 'are'} typing...
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+          
+          {/* Main content grid */}
+          <div className="flex-1 grid md:grid-cols-2 gap-8">
           <div className="bg-green-50 border-2 border-green-200 rounded-xl p-6">
             <h2 className="text-xl font-semibold text-green-800 mb-4 flex items-center gap-2">
               😊 What went well? (boom)
@@ -439,6 +445,7 @@ export default function InputPhase({ session, participant, isConnected }: InputP
                 </div>
               ))}
             </div>
+          </div>
           </div>
         </div>
       </div>
