@@ -3,11 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { apiService } from '@/lib/api';
-
-const AVATAR_OPTIONS = [
-  '🦁', '🐯', '🦊', '🐺', '🐙', '🦈', '🤖', '🦅',
-  '🐉', '🦋', '🐝', '🦜', '🦩', '🐧', '👻', '🦖'
-];
+import { AVATAR_OPTIONS, generateRandomName, getRandomAvailableAvatar } from '@/lib/avatars';
 
 export default function JoinSession() {
   const router = useRouter();
@@ -15,7 +11,7 @@ export default function JoinSession() {
   const [formData, setFormData] = useState({
     inviteCode: '',
     displayName: '',
-    avatarId: '🦁'
+    avatarId: AVATAR_OPTIONS[0] // Will be set properly when session is loaded
   });
   const [sessionInfo, setSessionInfo] = useState<{
     id?: string;
@@ -41,6 +37,9 @@ export default function JoinSession() {
 
     try {
       const session = await apiService.getSessionByInviteCode(formData.inviteCode.toUpperCase());
+      const usedAvatars = session.participants?.map(p => p.avatarId) || [];
+      const availableAvatar = getRandomAvailableAvatar(usedAvatars);
+      
       setSessionInfo({
         id: session.id,
         title: session.title,
@@ -48,6 +47,9 @@ export default function JoinSession() {
         participantCount: session.participants?.length || 0,
         participants: session.participants?.map(p => ({ avatarId: p.avatarId, displayName: p.displayName })) || []
       });
+      
+      // Set a random available avatar
+      setFormData(prev => ({ ...prev, avatarId: availableAvatar }));
       setStep('details');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Invalid invite code');
@@ -59,18 +61,13 @@ export default function JoinSession() {
   const handleJoinSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    
-    if (!formData.displayName.trim()) {
-      setError('Please enter your name');
-      return;
-    }
 
     setIsLoading(true);
 
     try {
       const response = await apiService.joinSession({
         inviteCode: formData.inviteCode.toUpperCase(),
-        displayName: formData.displayName.trim(),
+        displayName: formData.displayName.trim() || undefined,
         avatarId: formData.avatarId
       });
 
@@ -95,6 +92,8 @@ export default function JoinSession() {
     setIsRefreshingSession(true);
     try {
       const session = await apiService.getSessionByInviteCode(formData.inviteCode.toUpperCase());
+      const usedAvatars = session.participants?.map(p => p.avatarId) || [];
+      
       setSessionInfo({
         id: session.id,
         title: session.title,
@@ -103,15 +102,11 @@ export default function JoinSession() {
         participants: session.participants?.map(p => ({ avatarId: p.avatarId, displayName: p.displayName })) || []
       });
       
-      // If current selected avatar is now taken, reset to first available
-      const currentAvatarTaken = session.participants?.some(p => p.avatarId === formData.avatarId);
+      // If current selected avatar is now taken, reset to available one
+      const currentAvatarTaken = usedAvatars.includes(formData.avatarId);
       if (currentAvatarTaken) {
-        const availableAvatar = AVATAR_OPTIONS.find(avatar => 
-          !session.participants?.some(p => p.avatarId === avatar)
-        );
-        if (availableAvatar) {
-          setFormData(prev => ({ ...prev, avatarId: availableAvatar }));
-        }
+        const availableAvatar = getRandomAvailableAvatar(usedAvatars);
+        setFormData(prev => ({ ...prev, avatarId: availableAvatar }));
       }
     } catch (err) {
       console.error('Failed to refresh session data:', err);
@@ -191,22 +186,50 @@ export default function JoinSession() {
           <form onSubmit={handleJoinSubmit} className="space-y-6">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Your Name *
+                Your Name (optional)
               </label>
-              <input
-                type="text"
-                value={formData.displayName}
-                onChange={(e) => setFormData(prev => ({ ...prev, displayName: e.target.value }))}
-                placeholder="Enter your display name"
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent text-gray-900 placeholder-gray-500"
-                required
-              />
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={formData.displayName}
+                  onChange={(e) => setFormData(prev => ({ ...prev, displayName: e.target.value }))}
+                  placeholder="Enter your display name (leave empty for random)"
+                  className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent text-gray-900 placeholder-gray-500"
+                />
+                <button
+                  type="button"
+                  onClick={() => setFormData(prev => ({ ...prev, displayName: generateRandomName() }))}
+                  className="px-4 py-3 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+                  title="Generate random name"
+                >
+                  🎲
+                </button>
+              </div>
+              {!formData.displayName.trim() && (
+                <p className="text-xs text-gray-500 mt-1">
+                  If empty, a random name like &quot;{generateRandomName()}&quot; will be assigned
+                </p>
+              )}
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Choose Your Avatar
-              </label>
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-sm font-medium text-gray-700">
+                  Choose Your Avatar
+                </label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const usedAvatars = sessionInfo?.participants?.map(p => p.avatarId) || [];
+                    const availableAvatar = getRandomAvailableAvatar(usedAvatars);
+                    setFormData(prev => ({ ...prev, avatarId: availableAvatar }));
+                  }}
+                  className="text-xs px-2 py-1 bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition-colors"
+                  title="Random available avatar"
+                >
+                  🎲 Random
+                </button>
+              </div>
               {isRefreshingSession && (
                 <p className="text-xs text-gray-500 mb-2">Refreshing available avatars...</p>
               )}

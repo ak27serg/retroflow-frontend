@@ -2,14 +2,14 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
 export interface CreateSessionRequest {
   title?: string;
-  hostName: string;
-  hostAvatar: string;
+  hostName?: string;
+  hostAvatar?: string;
 }
 
 export interface JoinSessionRequest {
   inviteCode: string;
-  displayName: string;
-  avatarId: string;
+  displayName?: string;
+  avatarId?: string;
 }
 
 export interface Session {

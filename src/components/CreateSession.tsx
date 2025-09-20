@@ -3,18 +3,14 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { apiService } from '@/lib/api';
-
-const AVATAR_OPTIONS = [
-  '🦁', '🐯', '🦊', '🐺', '🐙', '🦈', '🤖', '🦅',
-  '🐉', '🦋', '🐝', '🦜', '🦩', '🐧', '👻', '🦖'
-];
+import { AVATAR_OPTIONS, generateRandomName, getRandomAvatar } from '@/lib/avatars';
 
 export default function CreateSession() {
   const router = useRouter();
   const [formData, setFormData] = useState({
     title: '',
     hostName: '',
-    hostAvatar: '🦁'
+    hostAvatar: getRandomAvatar()
   });
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
@@ -22,18 +18,13 @@ export default function CreateSession() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    
-    if (!formData.hostName.trim()) {
-      setError('Please enter your name');
-      return;
-    }
 
     setIsLoading(true);
 
     try {
       const response = await apiService.createSession({
         title: formData.title.trim() || undefined,
-        hostName: formData.hostName.trim(),
+        hostName: formData.hostName.trim() || undefined,
         hostAvatar: formData.hostAvatar
       });
 
@@ -89,22 +80,46 @@ export default function CreateSession() {
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">
-            Your Name *
+            Your Name (optional)
           </label>
-          <input
-            type="text"
-            value={formData.hostName}
-            onChange={(e) => setFormData(prev => ({ ...prev, hostName: e.target.value }))}
-            placeholder="Enter your display name"
-            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-500"
-            required
-          />
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={formData.hostName}
+              onChange={(e) => setFormData(prev => ({ ...prev, hostName: e.target.value }))}
+              placeholder="Enter your display name (leave empty for random)"
+              className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-500"
+            />
+            <button
+              type="button"
+              onClick={() => setFormData(prev => ({ ...prev, hostName: generateRandomName() }))}
+              className="px-4 py-3 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+              title="Generate random name"
+            >
+              🎲
+            </button>
+          </div>
+          {!formData.hostName.trim() && (
+            <p className="text-xs text-gray-500 mt-1">
+              If empty, a random name like &quot;{generateRandomName()}&quot; will be assigned
+            </p>
+          )}
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Choose Your Avatar
-          </label>
+          <div className="flex items-center justify-between mb-2">
+            <label className="block text-sm font-medium text-gray-700">
+              Choose Your Avatar
+            </label>
+            <button
+              type="button"
+              onClick={() => setFormData(prev => ({ ...prev, hostAvatar: getRandomAvatar() }))}
+              className="text-xs px-2 py-1 bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition-colors"
+              title="Random avatar"
+            >
+              🎲 Random
+            </button>
+          </div>
           <div className="grid grid-cols-8 gap-2">
             {AVATAR_OPTIONS.map((avatar, index) => (
               <button
