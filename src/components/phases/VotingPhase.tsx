@@ -117,12 +117,9 @@ export default function VotingPhase({ session, participant, isConnected }: Votin
     if (!socket) return;
 
     const handleVotesUpdated = (data: { groupId: string; totalVotes: number; participantProgress?: Record<string, number> }) => {
-      setGroups(prev => prev.map(group => 
-        group.id === data.groupId 
-          ? { ...group, voteCount: data.totalVotes }
-          : group
-      ));
-
+      // Note: We don't update group.voteCount in voting phase since we only show user votes
+      // The total votes will be calculated and shown in the results phase
+      
       // Update participant voting progress if provided
       if (data.participantProgress && participant.isHost) {
         const progressMap = new Map<string, number>();
@@ -315,9 +312,9 @@ export default function VotingPhase({ session, participant, isConnected }: Votin
                   
                   <div className="text-right">
                     <div className="text-2xl font-bold text-purple-600">
-                      {group.voteCount}
+                      {group.userVotes}
                     </div>
-                    <div className="text-xs text-gray-500">total votes</div>
+                    <div className="text-xs text-gray-500">your votes</div>
                   </div>
                 </div>
 
