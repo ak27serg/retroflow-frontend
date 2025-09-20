@@ -255,7 +255,6 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
           const isSameColumn = Math.abs(fromPos.x - toPos.x) < 100; // 100px tolerance
           
           let pathData: string;
-          let midPoint: { x: number; y: number };
           
           if (isSameColumn) {
             // Create a parabolic curve bending to the right
@@ -264,11 +263,9 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
             const controlX = Math.max(fromPos.x, toPos.x) + controlOffset;
             
             pathData = `M ${fromPos.x} ${fromPos.y} Q ${controlX} ${midY} ${toPos.x} ${toPos.y}`;
-            midPoint = { x: controlX, y: midY }; // Approximate midpoint of curve
           } else {
             // Use straight line for different columns
             pathData = `M ${fromPos.x} ${fromPos.y} L ${toPos.x} ${toPos.y}`;
-            midPoint = { x: (fromPos.x + toPos.x) / 2, y: (fromPos.y + toPos.y) / 2 };
           }
           
           return (
@@ -286,25 +283,6 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
                   removeConnection(connection.id);
                 }}
               />
-              {/* Add a small circle at the midpoint for easier clicking */}
-              <circle
-                cx={midPoint.x}
-                cy={midPoint.y}
-                r="6"
-                fill="#10b981"
-                className="cursor-pointer"
-                style={{ pointerEvents: 'all' }}
-                onClick={(e) => {
-                  console.log('Circle clicked!', connection.id);
-                  e.stopPropagation();
-                  removeConnection(connection.id);
-                }}
-              >
-                <title>Click to remove connection</title>
-              </circle>
-              {/* Debug circles to show line endpoints */}
-              <circle cx={fromPos.x} cy={fromPos.y} r="8" fill="#ff0000" opacity="0.5" style={{ pointerEvents: 'none' }} />
-              <circle cx={toPos.x} cy={toPos.y} r="8" fill="#0000ff" opacity="0.5" style={{ pointerEvents: 'none' }} />
             </g>
           );
         })}
