@@ -251,26 +251,44 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
           
           console.log('Rendering connection:', connection.id, 'from', fromPos, 'to', toPos);
           
+          // Check if cards are in the same column (similar X coordinates)
+          const isSameColumn = Math.abs(fromPos.x - toPos.x) < 100; // 100px tolerance
+          
+          let pathData: string;
+          let midPoint: { x: number; y: number };
+          
+          if (isSameColumn) {
+            // Create a parabolic curve bending to the right
+            const controlOffset = 150; // How far right the curve bends
+            const midY = (fromPos.y + toPos.y) / 2;
+            const controlX = Math.max(fromPos.x, toPos.x) + controlOffset;
+            
+            pathData = `M ${fromPos.x} ${fromPos.y} Q ${controlX} ${midY} ${toPos.x} ${toPos.y}`;
+            midPoint = { x: controlX, y: midY }; // Approximate midpoint of curve
+          } else {
+            // Use straight line for different columns
+            pathData = `M ${fromPos.x} ${fromPos.y} L ${toPos.x} ${toPos.y}`;
+            midPoint = { x: (fromPos.x + toPos.x) / 2, y: (fromPos.y + toPos.y) / 2 };
+          }
+          
           return (
             <g key={connection.id} style={{ pointerEvents: 'auto' }}>
-              <line
-                x1={fromPos.x}
-                y1={fromPos.y}
-                x2={toPos.x}
-                y2={toPos.y}
+              <path
+                d={pathData}
                 stroke="#10b981"
                 strokeWidth="3"
+                fill="none"
                 className="cursor-pointer"
                 onClick={(e) => {
-                  console.log('Line clicked!', connection.id);
+                  console.log('Path clicked!', connection.id);
                   e.stopPropagation();
                   removeConnection(connection.id);
                 }}
               />
               {/* Add a small circle at the midpoint for easier clicking */}
               <circle
-                cx={(fromPos.x + toPos.x) / 2}
-                cy={(fromPos.y + toPos.y) / 2}
+                cx={midPoint.x}
+                cy={midPoint.y}
                 r="6"
                 fill="#10b981"
                 className="cursor-pointer"
