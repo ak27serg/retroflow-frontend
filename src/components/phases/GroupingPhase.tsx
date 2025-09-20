@@ -239,11 +239,19 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
         className="absolute inset-0"
         style={{ 
           zIndex: 1, 
-          pointerEvents: 'none'
+          pointerEvents: 'auto'
         }}
         width="100%"
         height="100%"
       >
+        {/* Transparent background to catch clicks but let them pass through */}
+        <rect 
+          width="100%" 
+          height="100%" 
+          fill="transparent" 
+          style={{ pointerEvents: 'none' }}
+        />
+        
         {/* Existing connections */}
         {connections.map((connection) => {
           const fromPos = getCardPosition(connection.fromResponseId);
@@ -269,11 +277,12 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
           }
           
           return (
-            <g key={connection.id} style={{ pointerEvents: 'auto' }}>
+            <g key={connection.id} style={{ pointerEvents: 'all' }}>
+              {/* Invisible wider path for easier clicking */}
               <path
                 d={pathData}
-                stroke="#10b981"
-                strokeWidth="3"
+                stroke="transparent"
+                strokeWidth="12"
                 fill="none"
                 className="cursor-pointer"
                 style={{ pointerEvents: 'stroke' }}
@@ -282,6 +291,15 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
                   e.stopPropagation();
                   removeConnection(connection.id);
                 }}
+              />
+              {/* Visible path */}
+              <path
+                d={pathData}
+                stroke="#10b981"
+                strokeWidth="3"
+                fill="none"
+                className="cursor-pointer"
+                style={{ pointerEvents: 'none' }}
               />
             </g>
           );
