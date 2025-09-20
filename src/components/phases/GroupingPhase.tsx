@@ -233,8 +233,8 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
       <svg
         className="absolute inset-0"
         style={{ 
-          zIndex: 1, 
-          pointerEvents: 'auto'
+          zIndex: 10, 
+          pointerEvents: 'none'
         }}
         width="100%"
         height="100%"
