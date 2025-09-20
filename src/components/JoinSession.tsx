@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { apiService } from '@/lib/api';
 
@@ -26,6 +26,7 @@ export default function JoinSession() {
   } | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [isRefreshingSession, setIsRefreshingSession] = useState(false);
 
   const handleCodeSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -88,11 +89,49 @@ export default function JoinSession() {
     }
   };
 
+  const refreshSessionData = async () => {
+    if (!sessionInfo?.id || !formData.inviteCode) return;
+    
+    setIsRefreshingSession(true);
+    try {
+      const session = await apiService.getSessionByInviteCode(formData.inviteCode.toUpperCase());
+      setSessionInfo({
+        id: session.id,
+        title: session.title,
+        currentPhase: session.currentPhase,
+        participantCount: session.participants?.length || 0,
+        participants: session.participants?.map(p => ({ avatarId: p.avatarId, displayName: p.displayName })) || []
+      });
+      
+      // If current selected avatar is now taken, reset to first available
+      const currentAvatarTaken = session.participants?.some(p => p.avatarId === formData.avatarId);
+      if (currentAvatarTaken) {
+        const availableAvatar = AVATAR_OPTIONS.find(avatar => 
+          !session.participants?.some(p => p.avatarId === avatar)
+        );
+        if (availableAvatar) {
+          setFormData(prev => ({ ...prev, avatarId: availableAvatar }));
+        }
+      }
+    } catch (err) {
+      console.error('Failed to refresh session data:', err);
+    } finally {
+      setIsRefreshingSession(false);
+    }
+  };
+
   const handleBack = () => {
     setStep('code');
     setSessionInfo(null);
     setError('');
   };
+
+  // Refresh session data when entering avatar selection step
+  useEffect(() => {
+    if (step === 'details' && sessionInfo?.id) {
+      refreshSessionData();
+    }
+  }, [step]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="bg-white/90 backdrop-blur rounded-xl shadow-lg p-8">
@@ -168,6 +207,9 @@ export default function JoinSession() {
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Choose Your Avatar
               </label>
+              {isRefreshingSession && (
+                <p className="text-xs text-gray-500 mb-2">Refreshing available avatars...</p>
+              )}
               <div className="grid grid-cols-8 gap-2">
                 {AVATAR_OPTIONS.map((avatar, index) => {
                   const isUsed = sessionInfo?.participants?.some(p => p.avatarId === avatar) || false;

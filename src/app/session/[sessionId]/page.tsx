@@ -9,6 +9,7 @@ import InputPhase from '@/components/phases/InputPhase';
 import GroupingPhase from '@/components/phases/GroupingPhase';
 import VotingPhase from '@/components/phases/VotingPhase';
 import ResultsPhase from '@/components/phases/ResultsPhase';
+import ErrorBoundary from '@/components/ErrorBoundary';
 
 export default function SessionPage() {
   const params = useParams();
@@ -140,10 +141,28 @@ export default function SessionPage() {
           } : null);
         });
 
-        socket.on('error', () => {
-          // NUCLEAR OPTION: Just ignore ALL socket errors for now to stop console spam
-          // TODO: This completely disables error handling but stops the empty object spam
-          return;
+        socket.on('error', (error) => {
+          console.error('Socket error:', error);
+          
+          // Handle different types of socket errors
+          if (error?.message) {
+            // Show user-friendly error messages for known error types
+            if (error.message.includes('Session not found')) {
+              setError('Session not found or has expired');
+              router.push('/');
+            } else if (error.message.includes('Participant not found')) {
+              setError('Unable to reconnect to session');
+              router.push('/');
+            } else if (error.message.includes('Unauthorized')) {
+              setError('You are not authorized to access this session');
+            } else {
+              setError(`Connection error: ${error.message}`);
+            }
+          } else {
+            // Generic error handling for unknown error types
+            console.warn('Unknown socket error format:', error);
+            setError('Connection error occurred');
+          }
         });
 
         setIsLoading(false);
@@ -194,15 +213,35 @@ export default function SessionPage() {
   const renderPhase = () => {
     switch (session.currentPhase) {
       case 'SETUP':
-        return <SetupPhase session={session} participant={currentParticipant} isConnected={isConnected} />;
+        return (
+          <ErrorBoundary>
+            <SetupPhase session={session} participant={currentParticipant} isConnected={isConnected} />
+          </ErrorBoundary>
+        );
       case 'INPUT':
-        return <InputPhase session={session} participant={currentParticipant} isConnected={isConnected} />;
+        return (
+          <ErrorBoundary>
+            <InputPhase session={session} participant={currentParticipant} isConnected={isConnected} />
+          </ErrorBoundary>
+        );
       case 'GROUPING':
-        return <GroupingPhase session={session} participant={currentParticipant} isConnected={isConnected} />;
+        return (
+          <ErrorBoundary>
+            <GroupingPhase session={session} participant={currentParticipant} isConnected={isConnected} />
+          </ErrorBoundary>
+        );
       case 'VOTING':
-        return <VotingPhase session={session} participant={currentParticipant} isConnected={isConnected} />;
+        return (
+          <ErrorBoundary>
+            <VotingPhase session={session} participant={currentParticipant} isConnected={isConnected} />
+          </ErrorBoundary>
+        );
       case 'RESULTS':
-        return <ResultsPhase session={session} participant={currentParticipant} isConnected={isConnected} />;
+        return (
+          <ErrorBoundary>
+            <ResultsPhase session={session} participant={currentParticipant} isConnected={isConnected} />
+          </ErrorBoundary>
+        );
       default:
         return <div>Unknown phase: {session.currentPhase}</div>;
     }

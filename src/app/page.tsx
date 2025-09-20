@@ -1,5 +1,6 @@
 import CreateSession from '@/components/CreateSession';
 import JoinSession from '@/components/JoinSession';
+import ErrorBoundary from '@/components/ErrorBoundary';
 
 export default function HomePage() {
   return (
@@ -15,8 +16,12 @@ export default function HomePage() {
         </div>
 
         <div className="max-w-4xl mx-auto grid md:grid-cols-2 gap-8">
-          <CreateSession />
-          <JoinSession />
+          <ErrorBoundary>
+            <CreateSession />
+          </ErrorBoundary>
+          <ErrorBoundary>
+            <JoinSession />
+          </ErrorBoundary>
         </div>
 
         <div className="mt-16 text-center">
