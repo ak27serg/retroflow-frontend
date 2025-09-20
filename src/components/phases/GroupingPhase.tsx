@@ -116,7 +116,7 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
             </div>
             <div>
               <h3 className="text-lg font-semibold text-red-800 mb-4 flex items-center gap-2">
-                😕 What didn't go well?
+                😕 What didn&apos;t go well?
               </h3>
               <div className="space-y-4">
                 {responses.filter(r => r.category === 'DIDNT_GO_WELL').map((response) => (
