@@ -156,15 +156,18 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
       
       // Get the position of the selected card with a small delay to ensure element is rendered
       setTimeout(() => {
-        const cardElement = document.querySelector(`[data-response-id="${responseId}"]`) as HTMLElement;
-        if (cardElement && canvasRef.current) {
-          const canvasRect = canvasRef.current.getBoundingClientRect();
-          const cardRect = cardElement.getBoundingClientRect();
-          const centerPosition = {
-            x: cardRect.left - canvasRect.left + cardRect.width / 2,
-            y: cardRect.top - canvasRect.top + cardRect.height / 2
-          };
-          setSelectedCardPosition(centerPosition);
+        const containerElement = document.querySelector(`[data-response-id="${responseId}"]`) as HTMLElement;
+        if (containerElement && canvasRef.current) {
+          const visualCardElement = containerElement.querySelector('.response-card-visual') as HTMLElement;
+          if (visualCardElement) {
+            const canvasRect = canvasRef.current.getBoundingClientRect();
+            const cardRect = visualCardElement.getBoundingClientRect();
+            const centerPosition = {
+              x: cardRect.left - canvasRect.left + cardRect.width / 2,
+              y: cardRect.top - canvasRect.top + cardRect.height / 2
+            };
+            setSelectedCardPosition(centerPosition);
+          }
         }
       }, 10);
     }
