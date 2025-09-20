@@ -259,7 +259,7 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
           
           if (isSameColumn) {
             // Create a parabolic curve bending to the right
-            const controlOffset = 150; // How far right the curve bends
+            const controlOffset = 450; // How far right the curve bends (3x farther)
             const midY = (fromPos.y + toPos.y) / 2;
             const controlX = Math.max(fromPos.x, toPos.x) + controlOffset;
             
