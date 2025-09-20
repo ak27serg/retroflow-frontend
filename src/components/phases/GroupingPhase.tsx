@@ -181,6 +181,7 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
   };
 
   const removeConnection = (connectionId: string) => {
+    console.log('removeConnection called with connectionId:', connectionId);
     // Emit to backend
     socketService.emit('remove_connection', {
       sessionId: session.id,
@@ -197,6 +198,12 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
         x: cardRect.left - canvasRect.left + cardRect.width / 2,
         y: cardRect.top - canvasRect.top + cardRect.height / 2
       };
+      console.log('getCardPosition debug:', {
+        responseId,
+        canvasRect: { left: canvasRect.left, top: canvasRect.top, width: canvasRect.width, height: canvasRect.height },
+        cardRect: { left: cardRect.left, top: cardRect.top, width: cardRect.width, height: cardRect.height },
+        calculatedPosition: position
+      });
       return position;
     }
     console.warn('Card element not found for responseId:', responseId);
@@ -217,6 +224,8 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
           const fromPos = getCardPosition(connection.fromResponseId);
           const toPos = getCardPosition(connection.toResponseId);
           
+          console.log('Rendering connection:', connection.id, 'from', fromPos, 'to', toPos);
+          
           return (
             <g key={connection.id} style={{ pointerEvents: 'auto' }}>
               <line
@@ -227,7 +236,11 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
                 stroke="#10b981"
                 strokeWidth="3"
                 className="cursor-pointer"
-                onClick={() => removeConnection(connection.id)}
+                onClick={(e) => {
+                  console.log('Line clicked!', connection.id);
+                  e.stopPropagation();
+                  removeConnection(connection.id);
+                }}
               />
               {/* Add a small circle at the midpoint for easier clicking */}
               <circle
@@ -236,26 +249,44 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
                 r="6"
                 fill="#10b981"
                 className="cursor-pointer"
-                onClick={() => removeConnection(connection.id)}
+                onClick={(e) => {
+                  console.log('Circle clicked!', connection.id);
+                  e.stopPropagation();
+                  removeConnection(connection.id);
+                }}
               >
                 <title>Click to remove connection</title>
               </circle>
+              {/* Debug circles to show line endpoints */}
+              <circle cx={fromPos.x} cy={fromPos.y} r="8" fill="#ff0000" opacity="0.5" style={{ pointerEvents: 'none' }} />
+              <circle cx={toPos.x} cy={toPos.y} r="8" fill="#0000ff" opacity="0.5" style={{ pointerEvents: 'none' }} />
             </g>
           );
         })}
         
         {/* Drawing line following cursor */}
         {isDrawingConnection && selectedCardId && (
-          <line
-            x1={selectedCardPosition.x}
-            y1={selectedCardPosition.y}
-            x2={cursorPosition.x}
-            y2={cursorPosition.y}
-            stroke="#10b981"
-            strokeWidth="3"
-            strokeDasharray="5,5"
-            style={{ pointerEvents: 'none' }}
-          />
+          <>
+            <line
+              x1={selectedCardPosition.x}
+              y1={selectedCardPosition.y}
+              x2={cursorPosition.x}
+              y2={cursorPosition.y}
+              stroke="#10b981"
+              strokeWidth="3"
+              strokeDasharray="5,5"
+              style={{ pointerEvents: 'none' }}
+            />
+            {/* Debug circle to show where drawing line starts */}
+            <circle 
+              cx={selectedCardPosition.x} 
+              cy={selectedCardPosition.y} 
+              r="10" 
+              fill="#ff00ff" 
+              opacity="0.7" 
+              style={{ pointerEvents: 'none' }} 
+            />
+          </>
         )}
       </svg>
     );
