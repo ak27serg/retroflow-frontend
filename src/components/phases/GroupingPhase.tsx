@@ -14,10 +14,9 @@ interface ResponseCardProps {
   response: Response;
   onChainClick: (responseId: string) => void;
   isSelected: boolean;
-  centerCoordinates: { x: number; y: number };
 }
 
-function ResponseCard({ response, onChainClick, isSelected, centerCoordinates }: ResponseCardProps) {
+function ResponseCard({ response, onChainClick, isSelected }: ResponseCardProps) {
   return (
     <div
       className={`response-card-visual p-3 rounded-lg border-2 shadow-sm transition-all duration-200 w-48 relative ${
@@ -38,10 +37,6 @@ function ResponseCard({ response, onChainClick, isSelected, centerCoordinates }:
         <span className="text-xs">🔗</span>
       </button>
 
-      {/* Center coordinates display */}
-      <div className="absolute top-1 left-1 bg-gray-800 text-white text-xs px-1.5 py-0.5 rounded font-mono opacity-75">
-        Center: {centerCoordinates.x.toFixed(0)}, {centerCoordinates.y.toFixed(0)}
-      </div>
 
       <p className="text-gray-900 text-sm font-medium leading-tight">{response.content}</p>
       <div className="flex items-center gap-2 mt-2 text-xs text-gray-600">
@@ -384,10 +379,6 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
           ref={canvasRef}
           className="bg-white rounded-xl border-2 border-gray-300 min-h-[600px] p-6 relative"
         >
-          {/* Cursor coordinates display */}
-          <div className="absolute top-4 right-4 bg-gray-100 border border-gray-300 rounded px-3 py-1 text-sm font-mono text-gray-700 z-10">
-            Cursor: {cursorPosition.x.toFixed(0)}, {cursorPosition.y.toFixed(0)}
-          </div>
           
           {/* Connection lines overlay */}
           <ConnectionLines />
@@ -404,7 +395,6 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
                       response={response} 
                       onChainClick={handleChainClick}
                       isSelected={selectedCardId === response.id}
-                      centerCoordinates={getCardPosition(response.id)}
                     />
                   </div>
                 ))}
@@ -421,7 +411,6 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
                       response={response} 
                       onChainClick={handleChainClick}
                       isSelected={selectedCardId === response.id}
-                      centerCoordinates={getCardPosition(response.id)}
                     />
                   </div>
                 ))}
