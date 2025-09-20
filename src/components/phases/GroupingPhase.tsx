@@ -205,19 +205,12 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
 
   // Component for rendering connection lines
   const ConnectionLines = () => {
-    // Get canvas dimensions for proper SVG sizing
-    const canvasRect = canvasRef.current?.getBoundingClientRect();
-    const canvasWidth = canvasRect?.width || 1200;
-    const canvasHeight = canvasRect?.height || 800;
-    
     return (
       <svg
-        className="absolute inset-0 pointer-events-none"
-        style={{ zIndex: 1 }}
+        className="absolute inset-0"
+        style={{ zIndex: 1, pointerEvents: 'none' }}
         width="100%"
         height="100%"
-        viewBox={`0 0 ${canvasWidth} ${canvasHeight}`}
-        preserveAspectRatio="none"
       >
         {/* Existing connections */}
         {connections.map((connection) => {
@@ -225,7 +218,7 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
           const toPos = getCardPosition(connection.toResponseId);
           
           return (
-            <g key={connection.id}>
+            <g key={connection.id} style={{ pointerEvents: 'auto' }}>
               <line
                 x1={fromPos.x}
                 y1={fromPos.y}
@@ -235,7 +228,6 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
                 strokeWidth="3"
                 className="cursor-pointer"
                 onClick={() => removeConnection(connection.id)}
-                style={{ pointerEvents: 'stroke' }}
               />
               {/* Add a small circle at the midpoint for easier clicking */}
               <circle
@@ -245,7 +237,6 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
                 fill="#10b981"
                 className="cursor-pointer"
                 onClick={() => removeConnection(connection.id)}
-                style={{ pointerEvents: 'all' }}
               >
                 <title>Click to remove connection</title>
               </circle>
@@ -263,7 +254,7 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
             stroke="#10b981"
             strokeWidth="3"
             strokeDasharray="5,5"
-            className="pointer-events-none"
+            style={{ pointerEvents: 'none' }}
           />
         )}
       </svg>
