@@ -261,10 +261,26 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
     const socket = socketService.getSocket();
     if (!socket) return;
 
-    // DISABLED: This was causing synchronized movement issues
-    const handleResponseDragged = () => {
-      // Skip updates from other clients to prevent synchronization issues
-      return;
+    const handleResponseDragged = (data: { responseId: string; x: number; y: number; groupId: string | null; participantId?: string }) => {
+      // Only update if this is from another participant (prevent echo)
+      if (data.participantId && data.participantId !== participant.id) {
+        setResponses(prev => prev.map(response => {
+          if (response.id === data.responseId) {
+            console.log(`Syncing card movement from ${data.participantId}:`, {
+              responseId: data.responseId.slice(-4),
+              position: `(${data.x}, ${data.y})`,
+              groupId: data.groupId?.slice(-4) || 'none'
+            });
+            return {
+              ...response,
+              positionX: data.x,
+              positionY: data.y,
+              groupId: data.groupId
+            };
+          }
+          return response;
+        }));
+      }
     };
 
     const handleGroupCreated = (group: Group) => {
@@ -360,6 +376,28 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
     return topCard?.id === response.id;
   };
 
+  // Helper function to get consistent boundary constraints
+  const getBoundaryConstraints = () => {
+    const cardWidth = 192;
+    const cardHeight = 120;
+    const canvasElement = document.querySelector('.bg-white.rounded-xl.border-2.border-gray-300') as HTMLElement;
+    const fieldWidth = canvasElement ? canvasElement.clientWidth : 1000;
+    const fieldHeight = canvasElement ? canvasElement.clientHeight : 600;
+    const padding = 24;
+    
+    return {
+      cardWidth,
+      cardHeight,
+      fieldWidth,
+      fieldHeight,
+      padding,
+      minX: padding,
+      minY: padding,
+      maxX: fieldWidth - cardWidth - padding,
+      maxY: fieldHeight - cardHeight - padding
+    };
+  };
+
   // Helper function to move all cards in a group together
   const moveGroup = (draggedCardId: string, newX: number, newY: number) => {
     const draggedCard = responses.find(r => r.id === draggedCardId);
@@ -379,16 +417,9 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
         const currentY = r.positionY || 0;
         
         // Apply boundary constraints to each card
-        const cardWidth = 192;
-        const cardHeight = 120;
-        const fieldWidth = window.innerWidth > 1024 ? 1000 : window.innerWidth - 100;
-        const fieldHeight = 600;
-        const padding = 24;
-        const maxX = fieldWidth - cardWidth - (padding * 2);
-        const maxY = fieldHeight - cardHeight - (padding * 2);
-        
-        const newCardX = Math.max(padding, Math.min(maxX, currentX + deltaX));
-        const newCardY = Math.max(padding, Math.min(maxY, currentY + deltaY));
+        const bounds = getBoundaryConstraints();
+        const newCardX = Math.max(bounds.minX, Math.min(bounds.maxX, currentX + deltaX));
+        const newCardY = Math.max(bounds.minY, Math.min(bounds.maxY, currentY + deltaY));
         
         return { ...r, positionX: newCardX, positionY: newCardY };
       }
@@ -402,16 +433,9 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
       const currentY = card.positionY || 0;
       
       // Apply same boundary logic for server sync
-      const cardWidth = 192;
-      const cardHeight = 120;
-      const fieldWidth = window.innerWidth > 1024 ? 1000 : window.innerWidth - 100;
-      const fieldHeight = 600;
-      const padding = 24;
-      const maxX = fieldWidth - cardWidth - (padding * 2);
-      const maxY = fieldHeight - cardHeight - (padding * 2);
-      
-      const serverX = Math.max(padding, Math.min(maxX, currentX + deltaX));
-      const serverY = Math.max(padding, Math.min(maxY, currentY + deltaY));
+      const bounds = getBoundaryConstraints();
+      const serverX = Math.max(bounds.minX, Math.min(bounds.maxX, currentX + deltaX));
+      const serverY = Math.max(bounds.minY, Math.min(bounds.maxY, currentY + deltaY));
       
       socketService.emit('drag_response', {
         sessionId: session.id,
@@ -564,22 +588,10 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
     let newX = delta ? currentX + delta.x : currentX;
     let newY = delta ? currentY + delta.y : currentY;
     
-    // Add boundary constraints - card dimensions are 192px width (w-48)
-    const cardWidth = 192;
-    const cardHeight = 120; // Approximate height based on content
-    
-    // Get actual field dimensions from the canvas container
-    // Field has min-h-[600px] with p-6 (24px padding on each side)
-    const fieldWidth = window.innerWidth > 1024 ? 1000 : window.innerWidth - 100; // Responsive width
-    const fieldHeight = 600; // Fixed min height
-    const padding = 24; // p-6 = 24px padding
-    
-    // Ensure cards stay completely within the padded field area
-    const maxX = fieldWidth - cardWidth - (padding * 2);
-    const maxY = fieldHeight - cardHeight - (padding * 2);
-    
-    newX = Math.max(padding, Math.min(maxX, newX));
-    newY = Math.max(padding, Math.min(maxY, newY));
+    // Add boundary constraints using helper function
+    const bounds = getBoundaryConstraints();
+    newX = Math.max(bounds.minX, Math.min(bounds.maxX, newX));
+    newY = Math.max(bounds.minY, Math.min(bounds.maxY, newY));
 
     // Check if this card is part of a group
     if (draggedResponse.groupId && draggedResponse.groupId !== 'pending') {
@@ -822,25 +834,19 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
                   const index = categoryResponses.findIndex(r => r.id === id);
                   
                   // Use same boundary constraints as drag logic
-                  const cardWidth = 192;
-                  const cardHeight = 120;
-                  const fieldWidth = window.innerWidth > 1024 ? 1000 : window.innerWidth - 100;
-                  const fieldHeight = 600;
-                  const padding = 24;
-                  const maxX = fieldWidth - cardWidth - (padding * 2);
-                  const maxY = fieldHeight - cardHeight - (padding * 2);
+                  const bounds = getBoundaryConstraints();
                   
                   if (axis === 'x') {
                     // Create columns: positive cards on left, negative on right
                     // Ensure positions are within bounds
-                    const leftColumn = Math.max(padding, 100);
-                    const rightColumn = Math.min(maxX - 100, fieldWidth / 2 + 50);
+                    const leftColumn = Math.max(bounds.minX, 100);
+                    const rightColumn = Math.min(bounds.maxX - 100, bounds.fieldWidth / 2 + 50);
                     return category === 'WENT_WELL' ? leftColumn : rightColumn;
                   } else {
                     // Stack cards vertically in each column with spacing
-                    const baseY = Math.max(padding, 80);
-                    const spacing = Math.min(130, (maxY - baseY) / Math.max(categoryResponses.length, 1));
-                    return Math.min(maxY, baseY + (index * spacing));
+                    const baseY = Math.max(bounds.minY, 80);
+                    const spacing = Math.min(130, (bounds.maxY - baseY) / Math.max(categoryResponses.length, 1));
+                    return Math.min(bounds.maxY, baseY + (index * spacing));
                   }
                 };
                 
