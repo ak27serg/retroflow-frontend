@@ -157,11 +157,11 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
           if (visualCardElement) {
             const canvasRect = canvasRef.current.getBoundingClientRect();
             const cardRect = visualCardElement.getBoundingClientRect();
-            const centerPosition = {
-              x: cardRect.left - canvasRect.left + cardRect.width / 2,
-              y: cardRect.top - canvasRect.top + cardRect.height / 2
+            const rightEdgePosition = {
+              x: cardRect.left - canvasRect.left + cardRect.width, // Right edge
+              y: cardRect.top - canvasRect.top + cardRect.height / 2 // Vertical center
             };
-            setSelectedCardPosition(centerPosition);
+            setSelectedCardPosition(rightEdgePosition);
           }
         }
       }, 10);
@@ -203,17 +203,17 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
       if (visualCardElement) {
         const canvasRect = canvasRef.current.getBoundingClientRect();
         const cardRect = visualCardElement.getBoundingClientRect();
-        // Global coordinates relative to canvas (including padding area)
+        // Global coordinates relative to canvas (right edge center of card)
         const position = {
-          x: cardRect.left - canvasRect.left + cardRect.width / 2,
-          y: cardRect.top - canvasRect.top + cardRect.height / 2
+          x: cardRect.left - canvasRect.left + cardRect.width, // Right edge
+          y: cardRect.top - canvasRect.top + cardRect.height / 2 // Vertical center
         };
         console.log('getCardPosition debug:', {
           responseId,
           canvasRect: { left: canvasRect.left, top: canvasRect.top, width: canvasRect.width, height: canvasRect.height },
           cardRect: { left: cardRect.left, top: cardRect.top, width: cardRect.width, height: cardRect.height },
           calculatedPosition: position,
-          coordinateSystem: 'global coordinates relative to canvas (visual card element)'
+          coordinateSystem: 'global coordinates relative to canvas (right edge center of card)'
         });
         return position;
       } else {
@@ -261,7 +261,7 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
           
           if (isSameColumn) {
             // Create a parabolic curve bending to the right
-            const controlOffset = 450; // How far right the curve bends (3x farther)
+            const controlOffset = 225; // 50% shorter curve (connections now start from right edges)
             const midY = (fromPos.y + toPos.y) / 2;
             const controlX = Math.max(fromPos.x, toPos.x) + controlOffset;
             
