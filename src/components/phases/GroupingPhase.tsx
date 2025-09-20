@@ -20,7 +20,7 @@ interface ResponseCardProps {
 function ResponseCard({ response, onChainClick, isSelected, centerCoordinates }: ResponseCardProps) {
   return (
     <div
-      className={`p-3 rounded-lg border-2 shadow-sm transition-all duration-200 w-48 relative ${
+      className={`response-card-visual p-3 rounded-lg border-2 shadow-sm transition-all duration-200 w-48 relative ${
         response.category === 'WENT_WELL'
           ? 'bg-green-50 border-green-300'
           : 'bg-red-50 border-red-300'
@@ -198,25 +198,32 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
 
   // Get card position for SVG line drawing (global coordinates relative to canvas)
   const getCardPosition = (responseId: string) => {
-    const cardElement = document.querySelector(`[data-response-id="${responseId}"]`) as HTMLElement;
-    if (cardElement && canvasRef.current) {
-      const canvasRect = canvasRef.current.getBoundingClientRect();
-      const cardRect = cardElement.getBoundingClientRect();
-      // Global coordinates relative to canvas (including padding area)
-      const position = {
-        x: cardRect.left - canvasRect.left + cardRect.width / 2,
-        y: cardRect.top - canvasRect.top + cardRect.height / 2
-      };
-      console.log('getCardPosition debug:', {
-        responseId,
-        canvasRect: { left: canvasRect.left, top: canvasRect.top, width: canvasRect.width, height: canvasRect.height },
-        cardRect: { left: cardRect.left, top: cardRect.top, width: cardRect.width, height: cardRect.height },
-        calculatedPosition: position,
-        coordinateSystem: 'global coordinates relative to canvas (including padding)'
-      });
-      return position;
+    // Find the container first, then get the visual card element inside it
+    const containerElement = document.querySelector(`[data-response-id="${responseId}"]`) as HTMLElement;
+    if (containerElement && canvasRef.current) {
+      const visualCardElement = containerElement.querySelector('.response-card-visual') as HTMLElement;
+      if (visualCardElement) {
+        const canvasRect = canvasRef.current.getBoundingClientRect();
+        const cardRect = visualCardElement.getBoundingClientRect();
+        // Global coordinates relative to canvas (including padding area)
+        const position = {
+          x: cardRect.left - canvasRect.left + cardRect.width / 2,
+          y: cardRect.top - canvasRect.top + cardRect.height / 2
+        };
+        console.log('getCardPosition debug:', {
+          responseId,
+          canvasRect: { left: canvasRect.left, top: canvasRect.top, width: canvasRect.width, height: canvasRect.height },
+          cardRect: { left: cardRect.left, top: cardRect.top, width: cardRect.width, height: cardRect.height },
+          calculatedPosition: position,
+          coordinateSystem: 'global coordinates relative to canvas (visual card element)'
+        });
+        return position;
+      } else {
+        console.warn('Visual card element not found for responseId:', responseId);
+      }
+    } else {
+      console.warn('Container element not found for responseId:', responseId);
     }
-    console.warn('Card element not found for responseId:', responseId);
     return { x: 0, y: 0 };
   };
 
