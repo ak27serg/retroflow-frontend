@@ -317,16 +317,26 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
       ));
     };
 
+    const handleSocketError = (error: { message: string }) => {
+      console.error('Socket error in GroupingPhase:', error);
+      // Reset any pending group states on error
+      setResponses(prev => prev.map(r => 
+        r.groupId === 'pending' ? { ...r, groupId: null } : r
+      ));
+    };
+
     socket.on('response_dragged', handleResponseDragged);
     socket.on('group_created', handleGroupCreated);
     socket.on('group_updated', handleGroupUpdated);
     socket.on('response_ungrouped', handleResponseUngrouped);
+    socket.on('error', handleSocketError);
 
     return () => {
       socket.off('response_dragged', handleResponseDragged);
       socket.off('group_created', handleGroupCreated);
       socket.off('group_updated', handleGroupUpdated);
       socket.off('response_ungrouped', handleResponseUngrouped);
+      socket.off('error', handleSocketError);
     };
   }, [session, fetchSessionData]);
 
@@ -661,7 +671,10 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
           // Create new group with both cards
           // The group name will be the content of the top card (higher Z-index/earlier in list)
           const topCard = newY < (overlappingCard.positionY || 0) ? draggedResponse : overlappingCard;
-          const groupName = topCard.content.substring(0, 30) + (topCard.content.length > 30 ? '...' : '');
+          const rawGroupName = topCard.content.trim();
+          const groupName = rawGroupName 
+            ? (rawGroupName.substring(0, 30) + (rawGroupName.length > 30 ? '...' : ''))
+            : 'Grouped Items'; // Fallback name if content is empty
           
           // Keep cards exactly where they are - don't move them when grouping
           setResponses(prev => prev.map(r => {
@@ -677,6 +690,12 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
           }));
 
           // Create group with name from top card
+          console.log('Creating group:', {
+            groupName,
+            sessionId: session.id,
+            responseIds: [responseId, overlappingCard.id]
+          });
+          
           socketService.emit('create_group', {
             sessionId: session.id,
             label: groupName,
