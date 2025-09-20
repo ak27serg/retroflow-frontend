@@ -205,10 +205,19 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
 
   // Component for rendering connection lines
   const ConnectionLines = () => {
+    // Get canvas dimensions for proper SVG sizing
+    const canvasRect = canvasRef.current?.getBoundingClientRect();
+    const canvasWidth = canvasRect?.width || 1200;
+    const canvasHeight = canvasRect?.height || 800;
+    
     return (
       <svg
         className="absolute inset-0 pointer-events-none"
         style={{ zIndex: 1 }}
+        width="100%"
+        height="100%"
+        viewBox={`0 0 ${canvasWidth} ${canvasHeight}`}
+        preserveAspectRatio="none"
       >
         {/* Existing connections */}
         {connections.map((connection) => {
