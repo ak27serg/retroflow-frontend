@@ -21,11 +21,26 @@ export default function VotingPhase({ session, participant, isConnected }: Votin
   const [participantVotingProgress, setParticipantVotingProgress] = useState<Map<string, number>>(new Map());
 
   useEffect(() => {
+    // Only proceed if we have essential session data
+    if (!session || !session.id) {
+      console.log('VotingPhase: Session data not ready, skipping group creation');
+      return;
+    }
+
+    console.log('VotingPhase: Creating votable groups from session data', {
+      hasGroups: !!session.groups,
+      groupsCount: session.groups?.length || 0,
+      hasResponses: !!session.responses,
+      responsesCount: session.responses?.length || 0,
+      hasVotes: !!session.votes,
+      votesCount: session.votes?.length || 0
+    });
+
     // Create votable groups from actual groups AND individual cards
     const votableGroups: VotableGroup[] = [];
     
     // Add actual groups
-    if (session.groups) {
+    if (session.groups && session.groups.length > 0) {
       session.groups.forEach(group => {
         votableGroups.push({
           ...group,
@@ -35,7 +50,7 @@ export default function VotingPhase({ session, participant, isConnected }: Votin
     }
     
     // Add individual cards as single-item "groups"
-    if (session.responses) {
+    if (session.responses && session.responses.length > 0) {
       const ungroupedResponses = session.responses.filter(response => !response.groupId);
       ungroupedResponses.forEach(response => {
         // Create a virtual group for each individual card
@@ -56,14 +71,15 @@ export default function VotingPhase({ session, participant, isConnected }: Votin
       });
     }
     
+    console.log('VotingPhase: Created votable groups:', votableGroups.length);
     setGroups(votableGroups);
 
     // Load existing votes for current participant
-    if (session.votes) {
+    if (session.votes && session.votes.length > 0 && votableGroups.length > 0) {
       const myVotes = session.votes.filter(vote => vote.participantId === participant.id);
       let totalUsedVotes = 0;
       
-      setGroups(prev => prev.map(group => {
+      const groupsWithVotes = votableGroups.map(group => {
         const userVote = myVotes.find(vote => vote.groupId === group.id);
         const userVotes = userVote ? userVote.voteCount : 0;
         totalUsedVotes += userVotes;
@@ -72,9 +88,14 @@ export default function VotingPhase({ session, participant, isConnected }: Votin
           ...group,
           userVotes
         };
-      }));
+      });
 
+      console.log('VotingPhase: Applied existing votes, total used:', totalUsedVotes);
+      setGroups(groupsWithVotes);
       setRemainingVotes(4 - totalUsedVotes);
+    } else {
+      console.log('VotingPhase: No existing votes to load or no groups available');
+      setRemainingVotes(4);
     }
 
     // Calculate voting progress for all participants (for host visibility)

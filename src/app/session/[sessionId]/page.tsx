@@ -94,8 +94,8 @@ export default function SessionPage() {
             timerEndTime: data.timerEndTime || null 
           } : null);
           
-          // Refresh session data when entering grouping or results phase to ensure we have all data
-          if (data.phase === 'GROUPING' || data.phase === 'RESULTS') {
+          // Refresh session data when entering grouping, voting, or results phase to ensure we have all data
+          if (data.phase === 'GROUPING' || data.phase === 'VOTING' || data.phase === 'RESULTS') {
             try {
               const freshSession = await apiService.getSession(sessionId);
               setSession(freshSession);
