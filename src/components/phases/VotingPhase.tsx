@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Session, Participant, Group } from '@/lib/api';
+import { useState, useEffect, useCallback } from 'react';
+import { Session, Participant, Group, Response, Connection } from '@/lib/api';
 import { socketService } from '@/lib/socket';
 
 interface VotingPhaseProps {
@@ -20,6 +20,121 @@ export default function VotingPhase({ session, participant, isConnected }: Votin
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [participantVotingProgress, setParticipantVotingProgress] = useState<Map<string, number>>(new Map());
 
+  // Function to build connected groups from responses and connections
+  const buildConnectedGroups = useCallback((responses: Response[], connections: Connection[]): VotableGroup[] => {
+    console.log('Building connected groups from:', { 
+      responsesCount: responses.length, 
+      connectionsCount: connections.length 
+    });
+
+    // Create adjacency map for connections
+    const adjacencyMap = new Map<string, Set<string>>();
+    
+    // Initialize each response as its own node
+    responses.forEach(response => {
+      adjacencyMap.set(response.id, new Set());
+    });
+    
+    // Add connections to adjacency map (bidirectional)
+    connections.forEach(connection => {
+      const fromSet = adjacencyMap.get(connection.fromResponseId);
+      const toSet = adjacencyMap.get(connection.toResponseId);
+      
+      if (fromSet) fromSet.add(connection.toResponseId);
+      if (toSet) toSet.add(connection.fromResponseId);
+    });
+    
+    // Find connected components using DFS
+    const visited = new Set<string>();
+    const connectedGroups: VotableGroup[] = [];
+    
+    const findConnectedGroup = (responseId: string): string[] => {
+      const group: string[] = [];
+      const stack = [responseId];
+      
+      while (stack.length > 0) {
+        const currentId = stack.pop()!;
+        if (visited.has(currentId)) continue;
+        
+        visited.add(currentId);
+        group.push(currentId);
+        
+        const neighbors = adjacencyMap.get(currentId);
+        if (neighbors) {
+          neighbors.forEach(neighborId => {
+            if (!visited.has(neighborId)) {
+              stack.push(neighborId);
+            }
+          });
+        }
+      }
+      
+      return group;
+    };
+    
+    // Process each response to find its connected group
+    responses.forEach(response => {
+      if (!visited.has(response.id)) {
+        const connectedResponseIds = findConnectedGroup(response.id);
+        const connectedResponses = connectedResponseIds
+          .map(id => responses.find(r => r.id === id))
+          .filter(Boolean) as Response[];
+        
+        if (connectedResponses.length > 0) {
+          // Create a group for connected responses
+          if (connectedResponses.length > 1) {
+            // Multiple connected responses - create merged group
+            const groupId = `connected-${connectedResponseIds.sort().join('-')}`;
+            const combinedContent = connectedResponses.map(r => r.content).join(' • ');
+            const avgX = connectedResponses.reduce((sum, r) => sum + (r.positionX || 0), 0) / connectedResponses.length;
+            const avgY = connectedResponses.reduce((sum, r) => sum + (r.positionY || 0), 0) / connectedResponses.length;
+            
+            connectedGroups.push({
+              id: groupId,
+              sessionId: session.id,
+              label: combinedContent.length > 60 
+                ? combinedContent.substring(0, 60) + '...'
+                : combinedContent,
+              color: connectedResponses[0].category === 'WENT_WELL' ? '#10b981' : '#ef4444',
+              positionX: avgX,
+              positionY: avgY,
+              voteCount: 0,
+              createdAt: connectedResponses[0].createdAt,
+              responses: connectedResponses,
+              userVotes: 0
+            });
+            
+            console.log('Created connected group:', {
+              groupId,
+              responseIds: connectedResponseIds,
+              combinedContent: combinedContent.substring(0, 100) + '...'
+            });
+          } else {
+            // Single response - create individual group
+            const response = connectedResponses[0];
+            connectedGroups.push({
+              id: `individual-${response.id}`,
+              sessionId: session.id,
+              label: response.content.length > 30 
+                ? response.content.substring(0, 30) + '...'
+                : response.content,
+              color: response.category === 'WENT_WELL' ? '#10b981' : '#ef4444',
+              positionX: response.positionX || 0,
+              positionY: response.positionY || 0,
+              voteCount: 0,
+              createdAt: response.createdAt,
+              responses: [response],
+              userVotes: 0
+            });
+          }
+        }
+      }
+    });
+    
+    console.log('Built connected groups:', connectedGroups.length);
+    return connectedGroups;
+  }, [session.id]);
+
   useEffect(() => {
     // Only proceed if we have essential session data
     if (!session || !session.id) {
@@ -32,40 +147,27 @@ export default function VotingPhase({ session, participant, isConnected }: Votin
       groupsCount: session.groups?.length || 0,
       hasResponses: !!session.responses,
       responsesCount: session.responses?.length || 0,
+      hasConnections: !!session.connections,
+      connectionsCount: session.connections?.length || 0,
       hasVotes: !!session.votes,
       votesCount: session.votes?.length || 0
     });
 
-    // Create votable groups from actual groups AND individual cards
-    const votableGroups: VotableGroup[] = [];
+    // Build connected groups using the new algorithm
+    let votableGroups: VotableGroup[] = [];
     
-    // Add actual groups
+    if (session.responses && session.responses.length > 0) {
+      const responses = session.responses.filter(response => !response.groupId); // Only ungrouped responses
+      const connections = session.connections || [];
+      
+      votableGroups = buildConnectedGroups(responses, connections);
+    }
+    
+    // Also add any existing manual groups from backend (if any)
     if (session.groups && session.groups.length > 0) {
       session.groups.forEach(group => {
         votableGroups.push({
           ...group,
-          userVotes: 0
-        });
-      });
-    }
-    
-    // Add individual cards as single-item "groups"
-    if (session.responses && session.responses.length > 0) {
-      const ungroupedResponses = session.responses.filter(response => !response.groupId);
-      ungroupedResponses.forEach(response => {
-        // Create a virtual group for each individual card
-        votableGroups.push({
-          id: `individual-${response.id}`, // Virtual group ID
-          sessionId: session.id,
-          label: response.content.length > 30 
-            ? response.content.substring(0, 30) + '...'
-            : response.content,
-          color: response.category === 'WENT_WELL' ? '#10b981' : '#ef4444',
-          positionX: response.positionX || 0,
-          positionY: response.positionY || 0,
-          voteCount: 0,
-          createdAt: response.createdAt,
-          responses: [response], // Single response in virtual group
           userVotes: 0
         });
       });
@@ -136,7 +238,7 @@ export default function VotingPhase({ session, participant, isConnected }: Votin
     return () => {
       socket.off('votes_updated', handleVotesUpdated);
     };
-  }, [session, participant.id]);
+  }, [session, participant.id, participant.isHost, buildConnectedGroups]);
 
   // Note: Real-time progress updates are now handled in the main handleVotesUpdated function above
 
@@ -302,11 +404,18 @@ export default function VotingPhase({ session, participant, isConnected }: Votin
               >
                 <div className="flex justify-between items-start mb-4">
                   <div>
-                    <h3 className="text-xl font-semibold text-gray-900">
-                      {group.label || 'Unnamed Group'}
-                    </h3>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-xl font-semibold text-gray-900">
+                        {group.label || 'Unnamed Group'}
+                      </h3>
+                      {group.id.startsWith('connected-') && (
+                        <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full font-medium">
+                          🔗 Connected
+                        </span>
+                      )}
+                    </div>
                     <p className="text-sm text-gray-500">
-                      {group.responses?.length || 0} items
+                      {group.responses?.length || 0} {group.responses?.length === 1 ? 'item' : 'items'}
                     </p>
                   </div>
                   
