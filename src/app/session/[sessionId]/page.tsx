@@ -183,7 +183,7 @@ export default function SessionPage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-orange-200 via-red-200 to-teal-300 flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-orange-200 via-red-200 to-green-300 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto mb-4"></div>
           <p className="text-gray-700 font-medium">Loading session...</p>
@@ -194,7 +194,7 @@ export default function SessionPage() {
 
   if (error || !session || !currentParticipant) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-cyan-200 via-purple-200 to-teal-200 flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-cyan-200 via-purple-200 to-green-200 flex items-center justify-center">
         <div className="text-center">
           <div className="text-6xl mb-4">😞</div>
           <h1 className="text-2xl font-bold text-gray-900 mb-2">Oops!</h1>
@@ -248,7 +248,7 @@ export default function SessionPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-cyan-200 via-purple-200 to-teal-200">
+    <div className="min-h-screen bg-gradient-to-br from-cyan-200 via-purple-200 to-green-200">
       {renderPhase()}
     </div>
   );

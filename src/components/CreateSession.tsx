@@ -57,7 +57,7 @@ export default function CreateSession() {
   return (
     <div className="bg-white/90 backdrop-blur rounded-xl shadow-lg p-8">
       <div className="text-center mb-6">
-        <div className="w-16 h-16 bg-gradient-to-br from-purple-400 to-teal-400 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg">
+        <div className="w-16 h-16 bg-gradient-to-br from-purple-400 to-green-400 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg">
           <span className="text-2xl text-white">🚀</span>
         </div>
         <h2 className="text-2xl font-bold text-gray-900 mb-2">Start New Retro</h2>
