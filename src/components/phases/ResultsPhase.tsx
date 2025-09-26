@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Session, Participant, Group } from '@/lib/api';
+import { Session, Participant, Group, Response, Connection } from '@/lib/api';
 import { socketService } from '@/lib/socket';
 
 interface ResultsPhaseProps {
@@ -18,6 +18,112 @@ export default function ResultsPhase({ session, participant }: ResultsPhaseProps
   const [presentationMode, setPresentationMode] = useState(false);
   const [currentItemIndex, setCurrentItemIndex] = useState(0);
   const [isInPresentation, setIsInPresentation] = useState(false);
+
+  // Function to build connected groups from responses and connections (for results without voting)
+  const buildConnectedGroupsForResults = useCallback((responses: Response[], connections: Connection[], sessionId: string): Group[] => {
+    console.log('Building connected groups for results from:', { 
+      responsesCount: responses.length, 
+      connectionsCount: connections.length 
+    });
+
+    // Create adjacency map for connections
+    const adjacencyMap = new Map<string, Set<string>>();
+    
+    // Initialize each response as its own node
+    responses.forEach(response => {
+      adjacencyMap.set(response.id, new Set());
+    });
+    
+    // Add connections to adjacency map (bidirectional)
+    connections.forEach(connection => {
+      const fromSet = adjacencyMap.get(connection.fromResponseId);
+      const toSet = adjacencyMap.get(connection.toResponseId);
+      
+      if (fromSet) fromSet.add(connection.toResponseId);
+      if (toSet) toSet.add(connection.fromResponseId);
+    });
+    
+    // Find connected components using DFS
+    const visited = new Set<string>();
+    const resultGroups: Group[] = [];
+    
+    const findConnectedGroup = (responseId: string): string[] => {
+      const group: string[] = [];
+      const stack = [responseId];
+      
+      while (stack.length > 0) {
+        const currentId = stack.pop()!;
+        if (visited.has(currentId)) continue;
+        
+        visited.add(currentId);
+        group.push(currentId);
+        
+        const neighbors = adjacencyMap.get(currentId);
+        if (neighbors) {
+          neighbors.forEach(neighborId => {
+            if (!visited.has(neighborId)) {
+              stack.push(neighborId);
+            }
+          });
+        }
+      }
+      
+      return group;
+    };
+    
+    // Process each response to find its connected group
+    responses.forEach(response => {
+      if (!visited.has(response.id)) {
+        const connectedResponseIds = findConnectedGroup(response.id);
+        const connectedResponses = connectedResponseIds
+          .map(id => responses.find(r => r.id === id))
+          .filter(Boolean) as Response[];
+        
+        if (connectedResponses.length > 0) {
+          // Create a group for connected responses
+          if (connectedResponses.length > 1) {
+            // Multiple connected responses - create merged group
+            const combinedContent = connectedResponses.map(r => r.content).join(' • ');
+            const avgX = connectedResponses.reduce((sum, r) => sum + (r.positionX || 0), 0) / connectedResponses.length;
+            const avgY = connectedResponses.reduce((sum, r) => sum + (r.positionY || 0), 0) / connectedResponses.length;
+            
+            resultGroups.push({
+              id: `connected-${connectedResponseIds.sort().join('--')}`,
+              sessionId,
+              label: combinedContent.length > 60 
+                ? combinedContent.substring(0, 60) + '...'
+                : combinedContent,
+              color: connectedResponses[0].category === 'WENT_WELL' ? '#10b981' : '#ef4444',
+              positionX: avgX,
+              positionY: avgY,
+              voteCount: 0, // No votes cast
+              createdAt: connectedResponses[0].createdAt,
+              responses: connectedResponses
+            });
+          } else {
+            // Single response - create individual group
+            const response = connectedResponses[0];
+            resultGroups.push({
+              id: `individual-${response.id}`,
+              sessionId,
+              label: response.content.length > 30 
+                ? response.content.substring(0, 30) + '...'
+                : response.content,
+              color: response.category === 'WENT_WELL' ? '#10b981' : '#ef4444',
+              positionX: response.positionX || 0,
+              positionY: response.positionY || 0,
+              voteCount: 0, // No votes cast
+              createdAt: response.createdAt,
+              responses: [response]
+            });
+          }
+        }
+      }
+    });
+    
+    console.log('Built result groups:', resultGroups.length);
+    return resultGroups;
+  }, []);
 
   useEffect(() => {
     // Listen for presentation mode events
@@ -60,12 +166,10 @@ export default function ResultsPhase({ session, participant }: ResultsPhaseProps
       sessionResponses: session.responses
     });
     
-    // Now that individual responses get actual groups created when voted on,
-    // we can just use all groups from the session
     const allGroups: Group[] = [];
     
-    // Add all groups (including those created for individual responses)
-    if (session.groups) {
+    // Add all existing groups (including those created for voting)
+    if (session.groups && session.groups.length > 0) {
       session.groups.forEach(group => {
         console.log('Processing group:', {
           id: group.id,
@@ -74,21 +178,42 @@ export default function ResultsPhase({ session, participant }: ResultsPhaseProps
           responsesCount: group.responses?.length || 0
         });
         
-        // Only include groups that have votes or responses
-        if (group.voteCount > 0 || (group.responses && group.responses.length > 0)) {
+        // Include all groups that have responses (regardless of vote count)
+        if (group.responses && group.responses.length > 0) {
           allGroups.push(group);
         }
       });
     }
     
-    console.log('Filtered groups:', allGroups);
+    // If no groups exist yet (no voting happened), create groups from ungrouped responses
+    // This handles the case where user goes straight from grouping/input to results without voting
+    if (allGroups.length === 0 && session.responses && session.responses.length > 0) {
+      console.log('No voted groups found, creating groups from responses');
+      
+      // Get ungrouped responses
+      const ungroupedResponses = session.responses.filter(response => !response.groupId);
+      
+      // Use the same logic as VotingPhase to build connected groups
+      const connections = session.connections || [];
+      const builtGroups = buildConnectedGroupsForResults(ungroupedResponses, connections, session.id);
+      
+      allGroups.push(...builtGroups);
+    }
     
-    // Sort all groups by vote count (highest to lowest)
-    const sortedGroups = allGroups.sort((a, b) => b.voteCount - a.voteCount);
+    console.log('All groups to display:', allGroups);
+    
+    // Sort groups by vote count (highest first), then by number of responses for 0-vote items
+    const sortedGroups = allGroups.sort((a, b) => {
+      if (a.voteCount !== b.voteCount) {
+        return b.voteCount - a.voteCount; // Higher votes first
+      }
+      // For equal vote counts, sort by number of responses
+      return (b.responses?.length || 0) - (a.responses?.length || 0);
+    });
     
     console.log('Final sorted groups:', sortedGroups);
     setGroups(sortedGroups);
-  }, [session.groups, session.responses, session.votes]);
+  }, [session.groups, session.responses, session.votes, session.connections, session.id, buildConnectedGroupsForResults]);
 
   const addActionItem = () => {
     if (newActionItem.trim()) {
