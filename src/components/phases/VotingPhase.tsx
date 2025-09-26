@@ -84,7 +84,7 @@ export default function VotingPhase({ session, participant, isConnected }: Votin
           // Create a group for connected responses
           if (connectedResponses.length > 1) {
             // Multiple connected responses - create merged group
-            const groupId = `connected-${connectedResponseIds.sort().join('-')}`;
+            const groupId = `connected-${connectedResponseIds.sort().join('--')}`;
             const combinedContent = connectedResponses.map(r => r.content).join(' • ');
             const avgX = connectedResponses.reduce((sum, r) => sum + (r.positionX || 0), 0) / connectedResponses.length;
             const avgY = connectedResponses.reduce((sum, r) => sum + (r.positionY || 0), 0) / connectedResponses.length;
