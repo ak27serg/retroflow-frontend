@@ -13,8 +13,17 @@ export default function HomePage() {
       
       <div className="container mx-auto px-4 py-16 relative z-10">
         <div className="text-center mb-16">
-          <h1 className="text-6xl font-bold text-gray-900 mb-4">
-            <span className="text-purple-700">REDAPL</span> Storage Retro
+          <h1 className="text-6xl font-bold mb-4 leading-tight creative-heading">
+            <span className="bg-gradient-to-r from-purple-600 via-pink-500 to-red-500 bg-clip-text text-transparent font-black tracking-wider transform -rotate-1 inline-block animated-gradient">
+              REDAPL
+            </span>
+            <span className="text-gray-700 font-light italic mx-3 hover:text-gray-900">
+              Storage
+            </span>
+            <span className="bg-gradient-to-r from-green-500 via-blue-500 to-purple-600 bg-clip-text text-transparent font-extrabold tracking-wide transform rotate-1 inline-block animated-gradient">
+              Retro
+            </span>
+            <span className="text-4xl ml-2 rocket-float">🚀</span>
           </h1>
           <p className="text-xl text-gray-600 max-w-2xl mx-auto">
             Let&apos;s reflect on the past month of working together and come up with some action items

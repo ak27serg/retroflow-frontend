@@ -94,3 +94,38 @@ body {
     transform: rotate(-45deg);
   }
 }
+
+/* Creative heading animations */
+.creative-heading {
+  perspective: 1000px;
+}
+
+.creative-heading span {
+  transition: all 0.3s ease;
+}
+
+.creative-heading span:hover {
+  transform: scale(1.05) translateY(-2px);
+}
+
+/* Subtle floating animation for the rocket */
+@keyframes float {
+  0%, 100% { transform: translateY(0px) rotate(0deg); }
+  50% { transform: translateY(-5px) rotate(2deg); }
+}
+
+.rocket-float {
+  animation: float 3s ease-in-out infinite;
+}
+
+/* Enhanced gradient animations */
+@keyframes gradient-shift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+.animated-gradient {
+  background-size: 200% 200%;
+  animation: gradient-shift 4s ease infinite;
+}
