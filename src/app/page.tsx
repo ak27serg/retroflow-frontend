@@ -17,8 +17,8 @@ export default function HomePage() {
             <span className="bg-gradient-to-r from-purple-600 via-pink-500 to-red-500 bg-clip-text text-transparent font-black tracking-wider transform -rotate-1 inline-block animated-gradient">
               REDAPL
             </span>
-            <span className="text-gray-700 font-light italic mx-3 hover:text-gray-900">
-              Storage
+            <span className="bg-gradient-to-r from-orange-500 via-yellow-500 to-orange-600 bg-clip-text text-transparent font-black tracking-widest mx-3 animated-gradient transform hover:scale-110">
+              STORAGE
             </span>
             <span className="bg-gradient-to-r from-green-500 via-blue-500 to-purple-600 bg-clip-text text-transparent font-extrabold tracking-wide transform rotate-1 inline-block animated-gradient">
               Retro
