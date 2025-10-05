@@ -1,0 +1,149 @@
+# RetroFlow Frontend Development Log
+
+## Overview
+RetroFlow is a retrospective application built with Next.js 15, TypeScript, and Tailwind CSS v4. It supports real-time collaboration through Socket.IO for team retrospective sessions.
+
+## Key Features Implemented
+
+### 1. Connected Card Grouping System
+**Purpose**: Allow users to visually connect related cards in the grouping phase, which then appear as single merged items in voting.
+
+**Implementation**:
+- **Frontend Logic**: `src/components/phases/VotingPhase.tsx`
+  - `buildConnectedGroups()` function using depth-first search (DFS) algorithm
+  - Creates adjacency map from connections data
+  - Finds connected components and merges them into single voting items
+  - Groups connected cards with bullet-separated content (e.g., "Card A • Card B • Card C")
+  - Uses `connected-uuid1--uuid2--uuid3` format (double-dash separator to avoid UUID collision)
+
+- **Visual Indicators**: 
+  - Connected groups show "🔗 Connected" badge
+  - Individual cards displayed as normal single-item groups
+
+### 2. Connection Line System
+**Purpose**: Visual connection lines between cards in grouping phase.
+
+**Implementation**: `src/components/phases/GroupingPhase.tsx`
+- SVG-based connection system with z-index layering
+- Connection points moved from card centers to right edges
+- Parabolic curves for same-column connections, straight lines for different columns
+- Clickable connection lines for removal with hover effects
+- Data stored as Connection entities with fromResponseId/toResponseId
+
+### 3. Voting Progress Tracking
+**Purpose**: Host can see real-time voting progress for all participants.
+
+**Implementation**: `src/components/phases/VotingPhase.tsx`
+- Host-only sidebar showing remaining votes per participant
+- Real-time updates via socket events
+- Visual progress indicators with colored dots
+- Excludes host from progress tracking
+
+### 4. Individual Vote Display
+**Purpose**: Show only current user's votes instead of accumulated total during voting.
+
+**Implementation**: 
+- Modified voting cards to display `userVotes` instead of `voteCount`
+- Total vote calculation moved to results phase
+- Each participant sees only their own vote distribution
+
+### 5. Results Without Votes Fix
+**Purpose**: Display all cards/groups in results even when no votes are cast.
+
+**Implementation**: `src/components/phases/ResultsPhase.tsx`
+- Removed `voteCount > 0` filtering that was hiding unvoted groups
+- Added fallback `buildConnectedGroupsForResults()` function
+- Creates groups from raw responses when no voting occurred
+- Handles connected card grouping in results phase
+- Sorts by vote count first, then by response count for 0-vote items
+
+### 6. Presentation Mode
+**Purpose**: Host-controlled presentation of results with participant synchronization.
+
+**Implementation**: 
+- Full-screen presentation view with navigation controls
+- Real-time synchronization via socket events
+- Keyboard navigation (arrow keys, space, escape)
+- Progress dots for navigation
+- Works with both voted and unvoted results
+
+### 7. Creative UI Enhancements
+
+#### Main Page Heading Styling
+**Implementation**: `src/app/page.tsx` + `src/app/globals.css`
+- **"REDAPL"**: Purple-pink-red gradient, bold weight, slight left rotation
+- **"STORAGE"**: Orange-yellow gradient, bold weight, 2px elevated positioning
+- **"Retro"**: Green-blue-purple gradient, bold weight, slight right rotation
+- **"🚀"**: Floating animation with 3-second loop
+- Animated gradients with shifting background positions
+- Hover effects with scale and translate transforms
+
+#### Apple Background Decorations
+**Implementation**: `src/app/globals.css` + applied to main containers
+- Random apple emoji (🍎) positioning with CSS pseudo-elements
+- 6 apples total: 2 via CSS pseudo-elements, 4 via div elements
+- Low opacity (0.08-0.1) for subtle visual effect
+- Random rotations for natural appearance
+- Responsive: 2 apples on mobile, 6 on desktop
+
+#### Color Palette Updates
+- Replaced all pink gradient colors with teal, then teal with warm green
+- Main background: `from-cyan-200 via-purple-200 to-green-200`
+- Consistent color scheme across all pages and components
+
+### 8. Technical Improvements
+
+#### Timer Security
+**Verification**: Timer is properly backend-driven and cannot be manipulated from browser
+- Server calculates and stores `timerEndTime` in database
+- Client only displays countdown, has no authority over timer logic
+- All phase transitions controlled by server-side socket handlers
+
+#### Socket Connection Stability
+**Current State**: Using stable WebSocket configuration
+- Transports: `['websocket', 'polling']`
+- Reconnection enabled with 5 attempts
+- 20-second timeout with proper error handling
+
+#### Build System
+- Next.js 15.4.6 with Turbopack
+- Tailwind CSS v4 with @tailwindcss/postcss plugin
+- TypeScript with strict configuration
+- ESLint with Next.js rules
+
+## Component Architecture
+
+### Phase Components
+- `InputPhase.tsx`: Card input with timer and real-time updates
+- `GroupingPhase.tsx`: Card positioning and connection line drawing
+- `VotingPhase.tsx`: Connected group voting with progress tracking
+- `ResultsPhase.tsx`: Results display and presentation mode
+
+### Shared Components
+- `Timer.tsx`: Backend-driven timer with color-coded display
+- `CreateSession.tsx` / `JoinSession.tsx`: Session management
+- Socket service layer with proper error handling
+
+## Database Integration
+- Session data includes `connections`, `responses`, `groups`, `votes`
+- Connected groups created dynamically during voting
+- Real-time updates via Socket.IO events
+
+## Current State
+- ✅ Connected card grouping fully functional
+- ✅ Results display works with and without votes
+- ✅ Presentation mode synchronized across participants
+- ✅ Creative UI elements enhance user experience
+- ✅ Real-time voting progress tracking for hosts
+- ✅ Stable socket connections and error handling
+
+## Dependencies
+- Next.js 15.4.6
+- React 19.1.0
+- TypeScript ^5
+- Tailwind CSS ^4
+- Socket.IO Client ^4.8.1
+- @tailwindcss/postcss ^4.1.13
+
+## Known Issues
+None currently identified. All major features working as expected.
