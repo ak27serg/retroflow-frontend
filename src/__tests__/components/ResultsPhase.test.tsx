@@ -10,7 +10,7 @@ jest.mock('@/lib/socket', () => ({
 }));
 
 describe('ResultsPhase Component', () => {
-  let user: any;
+  let user: ReturnType<typeof userEvent.setup>;
 
   beforeEach(() => {
     user = userEvent.setup();
@@ -466,8 +466,8 @@ describe('ResultsPhase Component', () => {
         href: '',
         download: '',
         click: jest.fn(),
-      };
-      const mockCreateElement = jest.spyOn(document, 'createElement').mockReturnValue(mockLink as any);
+      } as HTMLAnchorElement;
+      const mockCreateElement = jest.spyOn(document, 'createElement').mockReturnValue(mockLink);
       const mockAppendChild = jest.spyOn(document.body, 'appendChild').mockImplementation();
       const mockRemoveChild = jest.spyOn(document.body, 'removeChild').mockImplementation();
 

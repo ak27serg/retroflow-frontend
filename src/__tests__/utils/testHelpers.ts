@@ -211,7 +211,7 @@ export const mockApiService = {
   deleteParticipant: jest.fn(),
 };
 
-export const renderWithProviders = (ui: React.ReactElement, options?: any) => {
+export const renderWithProviders = (ui: React.ReactElement) => {
   // In a real app, you might wrap with providers like Context, Router, etc.
   return ui;
 };

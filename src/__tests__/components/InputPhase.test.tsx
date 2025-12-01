@@ -1,8 +1,9 @@
 import { describe, test, expect, beforeEach, jest } from '@jest/globals';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import InputPhase from '@/components/phases/InputPhase';
 import { createMockSession, createMockParticipant, mockSocketService } from '../utils/testHelpers';
+import type { Session, Participant } from '@/lib/api';
 
 // Mock the socket service
 jest.mock('@/lib/socket', () => ({
@@ -10,9 +11,9 @@ jest.mock('@/lib/socket', () => ({
 }));
 
 describe('InputPhase Component', () => {
-  let mockSession: any;
-  let mockParticipant: any;
-  let user: any;
+  let mockSession: Session;
+  let mockParticipant: Participant;
+  let user: ReturnType<typeof userEvent.setup>;
 
   beforeEach(() => {
     mockSession = createMockSession({
