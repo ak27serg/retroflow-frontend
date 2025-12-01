@@ -202,8 +202,11 @@ export default function ResultsPhase({ session, participant }: ResultsPhaseProps
     
     console.log('All groups to display:', allGroups);
     
-    // Sort groups by vote count (highest first), then by number of responses for 0-vote items
-    const sortedGroups = allGroups.sort((a, b) => {
+    // Filter to only show groups with 1 or more votes
+    const groupsWithVotes = allGroups.filter(group => group.voteCount >= 1);
+    
+    // Sort groups by vote count (highest first), then by number of responses for equal vote counts
+    const sortedGroups = groupsWithVotes.sort((a, b) => {
       if (a.voteCount !== b.voteCount) {
         return b.voteCount - a.voteCount; // Higher votes first
       }
@@ -211,7 +214,7 @@ export default function ResultsPhase({ session, participant }: ResultsPhaseProps
       return (b.responses?.length || 0) - (a.responses?.length || 0);
     });
     
-    console.log('Final sorted groups:', sortedGroups);
+    console.log('Final sorted groups (with votes only):', sortedGroups);
     setGroups(sortedGroups);
   }, [session.groups, session.responses, session.votes, session.connections, session.id, buildConnectedGroupsForResults]);
 
