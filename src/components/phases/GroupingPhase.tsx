@@ -19,13 +19,13 @@ interface ResponseCardProps {
 function ResponseCard({ response, onChainClick, isSelected }: ResponseCardProps) {
   return (
     <div
-      className={`response-card-visual p-3 rounded-lg border-2 shadow-sm transition-all duration-200 w-48 relative ${
+      className={`response-card-visual p-3 rounded-lg border-2 shadow-sm transition-colors duration-200 w-48 relative ${
         response.category === 'WENT_WELL'
           ? 'bg-green-50 border-green-300'
           : 'bg-red-50 border-red-300'
       } ${isSelected ? 'ring-2 ring-green-500 ring-offset-2' : ''}`}
     >
-      {/* Chain icon in top right corner */}
+      {/* Chain icon */}
       <button
         onClick={(e) => {
           e.stopPropagation();
@@ -36,7 +36,6 @@ function ResponseCard({ response, onChainClick, isSelected }: ResponseCardProps)
       >
         <span className="text-xs">🔗</span>
       </button>
-
 
       <p className="text-gray-900 text-sm font-medium leading-tight">{response.content}</p>
       <div className="flex items-center gap-2 mt-2 text-xs text-gray-600">
@@ -56,31 +55,67 @@ function ResponseCard({ response, onChainClick, isSelected }: ResponseCardProps)
   );
 }
 
+const CARD_W = 192; // w-48 = 12rem = 192px
+const CARD_H = 120; // approximate card height
+const EMIT_THROTTLE_MS = 50;
 
 export default function GroupingPhase({ session, participant, isConnected }: GroupingPhaseProps) {
-  
   const [responses, setResponses] = useState<Response[]>([]);
   const [connections, setConnections] = useState<Connection[]>([]);
+  const [cardPositions, setCardPositions] = useState<Map<string, { x: number; y: number }>>(new Map());
   const [isDrawingConnection, setIsDrawingConnection] = useState(false);
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
   const [cursorPosition, setCursorPosition] = useState({ x: 0, y: 0 });
   const [selectedCardPosition, setSelectedCardPosition] = useState({ x: 0, y: 0 });
+
   const canvasRef = useRef<HTMLDivElement>(null);
+  const draggingIdRef = useRef<string | null>(null);
+  const dragOffsetRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const lastEmitRef = useRef<number>(0);
+  // Keep a ref to cardPositions so mouseup closure always has current positions
+  const cardPositionsRef = useRef<Map<string, { x: number; y: number }>>(new Map());
 
-
-
-
+  // Sync ref whenever state changes
   useEffect(() => {
-    // Initialize with session data if available
-    if (session.responses) {
-      setResponses(session.responses);
-    }
+    cardPositionsRef.current = cardPositions;
+  }, [cardPositions]);
+
+  // Initialize positions from session data
+  useEffect(() => {
+    if (!session.responses) return;
+
+    const canvas = canvasRef.current;
+    const canvasW = canvas?.offsetWidth ?? 760;
+    const colRightX = Math.floor(canvasW / 2) + 8;
+
+    const positions = new Map<string, { x: number; y: number }>();
+    const wentWell = session.responses.filter(r => r.category === 'WENT_WELL');
+    const didntGoWell = session.responses.filter(r => r.category === 'DIDNT_GO_WELL');
+
+    session.responses.forEach((r) => {
+      if (r.positionX !== 0 || r.positionY !== 0) {
+        // Use saved position from DB
+        positions.set(r.id, { x: r.positionX, y: r.positionY });
+      } else {
+        // Calculate default grid position
+        const isLeft = r.category === 'WENT_WELL';
+        const idx = isLeft ? wentWell.indexOf(r) : didntGoWell.indexOf(r);
+        positions.set(r.id, {
+          x: isLeft ? 16 : colRightX,
+          y: 16 + idx * 160,
+        });
+      }
+    });
+
+    setCardPositions(positions);
+    setResponses(session.responses);
+
     if (session.connections) {
       setConnections(session.connections);
     }
   }, [session.responses, session.connections]);
 
-  // Socket event listeners for real-time connections
+  // Socket event listeners
   useEffect(() => {
     const socket = socketService.getSocket();
     if (!socket) return;
@@ -93,25 +128,69 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
       setConnections(prev => prev.filter(conn => conn.id !== data.connectionId));
     };
 
+    const handleCardMoved = (data: { responseId: string; x: number; y: number }) => {
+      setCardPositions(prev => new Map(prev).set(data.responseId, { x: data.x, y: data.y }));
+    };
+
     socket.on('connection_created', handleConnectionCreated);
     socket.on('connection_removed', handleConnectionRemoved);
+    socket.on('card_moved', handleCardMoved);
 
     return () => {
       socket.off('connection_created', handleConnectionCreated);
       socket.off('connection_removed', handleConnectionRemoved);
+      socket.off('card_moved', handleCardMoved);
     };
   }, []);
 
-  // Mouse tracking for drawing connection lines and cursor coordinates
+  // Mouse tracking for connection drawing + card dragging
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
-      if (canvasRef.current) {
-        const rect = canvasRef.current.getBoundingClientRect();
-        const newPosition = {
-          x: e.clientX - rect.left,
-          y: e.clientY - rect.top
-        };
-        setCursorPosition(newPosition);
+      if (!canvasRef.current) return;
+      const rect = canvasRef.current.getBoundingClientRect();
+
+      // Always track cursor for SVG connection line preview
+      setCursorPosition({
+        x: e.clientX - rect.left,
+        y: e.clientY - rect.top,
+      });
+
+      // Handle card drag
+      if (draggingIdRef.current) {
+        const rawX = e.clientX - rect.left - dragOffsetRef.current.x;
+        const rawY = e.clientY - rect.top - dragOffsetRef.current.y;
+        const x = Math.max(0, Math.min(rawX, canvasRef.current.offsetWidth - CARD_W));
+        const y = Math.max(0, Math.min(rawY, canvasRef.current.offsetHeight - CARD_H));
+
+        setCardPositions(prev => new Map(prev).set(draggingIdRef.current!, { x, y }));
+
+        const now = Date.now();
+        if (now - lastEmitRef.current > EMIT_THROTTLE_MS) {
+          socketService.emit('drag_response', {
+            sessionId: session.id,
+            responseId: draggingIdRef.current,
+            x,
+            y,
+            isDragging: true,
+          });
+          lastEmitRef.current = now;
+        }
+      }
+    };
+
+    const handleMouseUp = () => {
+      if (!draggingIdRef.current) return;
+      const id = draggingIdRef.current;
+      draggingIdRef.current = null;
+      const pos = cardPositionsRef.current.get(id);
+      if (pos) {
+        socketService.emit('drag_response', {
+          sessionId: session.id,
+          responseId: id,
+          x: pos.x,
+          y: pos.y,
+          isDragging: false,
+        });
       }
     };
 
@@ -122,34 +201,44 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
       }
     };
 
-    // Always track mouse movement when over the canvas area
     document.addEventListener('mousemove', handleMouseMove);
-    
+    document.addEventListener('mouseup', handleMouseUp);
     if (isDrawingConnection) {
       document.addEventListener('keydown', handleKeyDown);
     }
 
     return () => {
       document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
       document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [isDrawingConnection]);
+  }, [isDrawingConnection, session.id]);
+
+  const handleMouseDown = (e: React.MouseEvent, responseId: string) => {
+    // Only start drag on left-click; ignore if clicking the chain button
+    if (e.button !== 0) return;
+    e.preventDefault();
+    const pos = cardPositions.get(responseId) ?? { x: 0, y: 0 };
+    const canvasRect = canvasRef.current?.getBoundingClientRect();
+    if (!canvasRect) return;
+    draggingIdRef.current = responseId;
+    dragOffsetRef.current = {
+      x: e.clientX - canvasRect.left - pos.x,
+      y: e.clientY - canvasRect.top - pos.y,
+    };
+  };
 
   const handleChainClick = (responseId: string) => {
     if (isDrawingConnection && selectedCardId) {
-      // If we're already drawing and click on a different card, create connection
       if (selectedCardId !== responseId) {
         createConnection(selectedCardId, responseId);
       }
-      // Reset drawing state
       setIsDrawingConnection(false);
       setSelectedCardId(null);
     } else {
-      // Start drawing a connection
       setSelectedCardId(responseId);
       setIsDrawingConnection(true);
-      
-      // Get the position of the selected card with a small delay to ensure element is rendered
+
       setTimeout(() => {
         const containerElement = document.querySelector(`[data-response-id="${responseId}"]`) as HTMLElement;
         if (containerElement && canvasRef.current) {
@@ -157,11 +246,10 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
           if (visualCardElement) {
             const canvasRect = canvasRef.current.getBoundingClientRect();
             const cardRect = visualCardElement.getBoundingClientRect();
-            const rightEdgePosition = {
-              x: cardRect.left - canvasRect.left + cardRect.width, // Right edge
-              y: cardRect.top - canvasRect.top + cardRect.height / 2 // Vertical center
-            };
-            setSelectedCardPosition(rightEdgePosition);
+            setSelectedCardPosition({
+              x: cardRect.left - canvasRect.left + cardRect.width,
+              y: cardRect.top - canvasRect.top + cardRect.height / 2,
+            });
           }
         }
       }, 10);
@@ -169,184 +257,127 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
   };
 
   const createConnection = (fromId: string, toId: string) => {
-    // Check if connection already exists
-    const exists = connections.some(conn => 
+    const exists = connections.some(conn =>
       (conn.fromResponseId === fromId && conn.toResponseId === toId) ||
       (conn.fromResponseId === toId && conn.toResponseId === fromId)
     );
-
     if (!exists) {
-      // Emit to backend
       socketService.emit('create_connection', {
         sessionId: session.id,
         fromResponseId: fromId,
-        toResponseId: toId
+        toResponseId: toId,
       });
     }
   };
 
   const removeConnection = (connectionId: string) => {
-    console.log('removeConnection called with connectionId:', connectionId);
-    // Emit to backend
     socketService.emit('remove_connection', {
       sessionId: session.id,
-      connectionId: connectionId
+      connectionId,
     });
   };
 
-  // Get card position for SVG line drawing (global coordinates relative to canvas)
+  // Get card anchor position for SVG connection lines (right-edge center)
   const getCardPosition = (responseId: string) => {
-    // Find the container first, then get the visual card element inside it
     const containerElement = document.querySelector(`[data-response-id="${responseId}"]`) as HTMLElement;
     if (containerElement && canvasRef.current) {
       const visualCardElement = containerElement.querySelector('.response-card-visual') as HTMLElement;
       if (visualCardElement) {
         const canvasRect = canvasRef.current.getBoundingClientRect();
         const cardRect = visualCardElement.getBoundingClientRect();
-        // Global coordinates relative to canvas (right edge center of card)
-        const position = {
-          x: cardRect.left - canvasRect.left + cardRect.width, // Right edge
-          y: cardRect.top - canvasRect.top + cardRect.height / 2 // Vertical center
+        return {
+          x: cardRect.left - canvasRect.left + cardRect.width,
+          y: cardRect.top - canvasRect.top + cardRect.height / 2,
         };
-        console.log('getCardPosition debug:', {
-          responseId,
-          canvasRect: { left: canvasRect.left, top: canvasRect.top, width: canvasRect.width, height: canvasRect.height },
-          cardRect: { left: cardRect.left, top: cardRect.top, width: cardRect.width, height: cardRect.height },
-          calculatedPosition: position,
-          coordinateSystem: 'global coordinates relative to canvas (right edge center of card)'
-        });
-        return position;
-      } else {
-        console.warn('Visual card element not found for responseId:', responseId);
       }
-    } else {
-      console.warn('Container element not found for responseId:', responseId);
     }
     return { x: 0, y: 0 };
   };
 
+  const ConnectionLines = () => (
+    <svg
+      className="absolute inset-0"
+      style={{ zIndex: 10, pointerEvents: 'none' }}
+      width="100%"
+      height="100%"
+    >
+      <rect width="100%" height="100%" fill="transparent" style={{ pointerEvents: 'none' }} />
 
+      {connections.map((connection) => {
+        const fromPos = getCardPosition(connection.fromResponseId);
+        const toPos = getCardPosition(connection.toResponseId);
+        const isSameColumn = Math.abs(fromPos.x - toPos.x) < 100;
+        let pathData: string;
 
-  // Component for rendering connection lines
-  const ConnectionLines = () => {
-    return (
-      <svg
-        className="absolute inset-0"
-        style={{ 
-          zIndex: 10, 
-          pointerEvents: 'none'
-        }}
-        width="100%"
-        height="100%"
-      >
-        {/* Transparent background to catch clicks but let them pass through */}
-        <rect 
-          width="100%" 
-          height="100%" 
-          fill="transparent" 
-          style={{ pointerEvents: 'none' }}
-        />
-        
-        {/* Existing connections */}
-        {connections.map((connection) => {
-          const fromPos = getCardPosition(connection.fromResponseId);
-          const toPos = getCardPosition(connection.toResponseId);
-          
-          console.log('Rendering connection:', connection.id, 'from', fromPos, 'to', toPos);
-          
-          // Check if cards are in the same column (similar X coordinates)
-          const isSameColumn = Math.abs(fromPos.x - toPos.x) < 100; // 100px tolerance
-          
-          let pathData: string;
-          
-          if (isSameColumn) {
-            // Create a parabolic curve bending to the right
-            const controlOffset = 225; // 50% shorter curve (connections now start from right edges)
-            const midY = (fromPos.y + toPos.y) / 2;
-            const controlX = Math.max(fromPos.x, toPos.x) + controlOffset;
-            
-            pathData = `M ${fromPos.x} ${fromPos.y} Q ${controlX} ${midY} ${toPos.x} ${toPos.y}`;
-          } else {
-            // Use straight line for different columns
-            pathData = `M ${fromPos.x} ${fromPos.y} L ${toPos.x} ${toPos.y}`;
-          }
-          
-          return (
-            <g key={connection.id} style={{ pointerEvents: 'all' }}>
-              {/* Invisible wider path for easier clicking */}
-              <path
-                d={pathData}
-                stroke="transparent"
-                strokeWidth="16"
-                fill="none"
-                className="cursor-pointer hover:stroke-red-200"
-                style={{ pointerEvents: 'stroke' }}
-                onClick={(e) => {
-                  console.log('Path clicked!', connection.id);
-                  e.stopPropagation();
-                  removeConnection(connection.id);
-                }}
-                onMouseEnter={(e) => {
-                  // Add visual feedback on hover
-                  const visiblePath = e.currentTarget.nextElementSibling as SVGPathElement;
-                  if (visiblePath) {
-                    visiblePath.style.stroke = '#ef4444'; // Red color on hover
-                    visiblePath.style.strokeWidth = '4';
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  // Restore original appearance
-                  const visiblePath = e.currentTarget.nextElementSibling as SVGPathElement;
-                  if (visiblePath) {
-                    visiblePath.style.stroke = '#10b981'; // Original green
-                    visiblePath.style.strokeWidth = '3';
-                  }
-                }}
-              />
-              {/* Visible path */}
-              <path
-                d={pathData}
-                stroke="#10b981"
-                strokeWidth="3"
-                fill="none"
-                className="cursor-pointer transition-all duration-200"
-                style={{ pointerEvents: 'none' }}
-              />
-            </g>
-          );
-        })}
-        
-        {/* Drawing line following cursor */}
-        {isDrawingConnection && selectedCardId && (
-          <>
-            <line
-              x1={selectedCardPosition.x}
-              y1={selectedCardPosition.y}
-              x2={cursorPosition.x}
-              y2={cursorPosition.y}
+        if (isSameColumn) {
+          const controlOffset = 225;
+          const midY = (fromPos.y + toPos.y) / 2;
+          const controlX = Math.max(fromPos.x, toPos.x) + controlOffset;
+          pathData = `M ${fromPos.x} ${fromPos.y} Q ${controlX} ${midY} ${toPos.x} ${toPos.y}`;
+        } else {
+          pathData = `M ${fromPos.x} ${fromPos.y} L ${toPos.x} ${toPos.y}`;
+        }
+
+        return (
+          <g key={connection.id} style={{ pointerEvents: 'all' }}>
+            <path
+              d={pathData}
+              stroke="transparent"
+              strokeWidth="16"
+              fill="none"
+              className="cursor-pointer"
+              style={{ pointerEvents: 'stroke' }}
+              onClick={(e) => {
+                e.stopPropagation();
+                removeConnection(connection.id);
+              }}
+              onMouseEnter={(e) => {
+                const visiblePath = e.currentTarget.nextElementSibling as SVGPathElement;
+                if (visiblePath) { visiblePath.style.stroke = '#ef4444'; visiblePath.style.strokeWidth = '4'; }
+              }}
+              onMouseLeave={(e) => {
+                const visiblePath = e.currentTarget.nextElementSibling as SVGPathElement;
+                if (visiblePath) { visiblePath.style.stroke = '#10b981'; visiblePath.style.strokeWidth = '3'; }
+              }}
+            />
+            <path
+              d={pathData}
               stroke="#10b981"
               strokeWidth="3"
-              strokeDasharray="5,5"
+              fill="none"
+              className="transition-all duration-200"
               style={{ pointerEvents: 'none' }}
             />
-          </>
-        )}
-      </svg>
-    );
-  };
+          </g>
+        );
+      })}
 
+      {isDrawingConnection && selectedCardId && (
+        <line
+          x1={selectedCardPosition.x}
+          y1={selectedCardPosition.y}
+          x2={cursorPosition.x}
+          y2={cursorPosition.y}
+          stroke="#10b981"
+          strokeWidth="3"
+          strokeDasharray="5,5"
+          style={{ pointerEvents: 'none' }}
+        />
+      )}
+    </svg>
+  );
 
-
-
-  const ungroupedResponses = responses;
-
+  const maxCardY = cardPositions.size > 0
+    ? Math.max(...Array.from(cardPositions.values()).map(p => p.y))
+    : 0;
+  const canvasMinHeight = Math.max(600, maxCardY + CARD_H + 80);
 
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="text-center mb-8">
         <h1 className="text-4xl font-bold text-gray-900 mb-2">Grouping Phase</h1>
-        <p className="text-gray-600">Review the responses from the input phase</p>
-        
+        <p className="text-gray-600">Drag cards to group related feedback. Click 🔗 to connect cards.</p>
+
         {participant.isHost && (
           <div className="flex gap-3 justify-center mt-4">
             <button
@@ -367,7 +398,7 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
         )}
       </div>
 
-      {ungroupedResponses.length === 0 ? (
+      {responses.length === 0 ? (
         <div className="text-center py-12">
           <div className="text-6xl mb-4">📝</div>
           <h3 className="text-xl font-semibold text-gray-900 mb-2">No Responses Found</h3>
@@ -382,56 +413,45 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
           </button>
         </div>
       ) : (
-        <div 
+        <div
           ref={canvasRef}
-          className="bg-white rounded-xl border-2 border-gray-300 min-h-[600px] p-6 relative"
+          className="bg-white rounded-xl border-2 border-gray-300 relative select-none"
+          style={{ minHeight: `${canvasMinHeight}px` }}
         >
-          
-          {/* Connection lines overlay */}
           <ConnectionLines />
-          
-          <div className="grid md:grid-cols-2 gap-8 relative" style={{ zIndex: 2 }}>
-            <div>
-              <h3 className="text-lg font-semibold text-green-800 mb-4 flex items-center gap-2">
-                😊 What went well?
-              </h3>
-              <div className="space-y-4">
-                {responses.filter(r => r.category === 'WENT_WELL').map((response) => (
-                  <div key={response.id} data-response-id={response.id}>
-                    <ResponseCard 
-                      response={response} 
-                      onChainClick={handleChainClick}
-                      isSelected={selectedCardId === response.id}
-                    />
-                  </div>
-                ))}
+
+          {responses.map((response) => {
+            const pos = cardPositions.get(response.id) ?? { x: 0, y: 0 };
+            const isDraggingThis = draggingIdRef.current === response.id;
+            return (
+              <div
+                key={response.id}
+                data-response-id={response.id}
+                style={{
+                  position: 'absolute',
+                  left: pos.x,
+                  top: pos.y,
+                  zIndex: isDraggingThis ? 20 : 1,
+                  userSelect: 'none',
+                }}
+                className="cursor-grab active:cursor-grabbing"
+                onMouseDown={(e) => handleMouseDown(e, response.id)}
+              >
+                <ResponseCard
+                  response={response}
+                  onChainClick={handleChainClick}
+                  isSelected={selectedCardId === response.id}
+                />
               </div>
-            </div>
-            <div>
-              <h3 className="text-lg font-semibold text-red-800 mb-4 flex items-center gap-2">
-                😕 What didn&apos;t go well?
-              </h3>
-              <div className="space-y-4">
-                {responses.filter(r => r.category === 'DIDNT_GO_WELL').map((response) => (
-                  <div key={response.id} data-response-id={response.id}>
-                    <ResponseCard 
-                      response={response} 
-                      onChainClick={handleChainClick}
-                      isSelected={selectedCardId === response.id}
-                    />
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-          
-          {/* Instructions */}
+            );
+          })}
+
           {isDrawingConnection ? (
-            <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-green-100 border border-green-300 rounded-lg px-4 py-2 text-sm text-green-800 z-10">
+            <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-green-100 border border-green-300 rounded-lg px-4 py-2 text-sm text-green-800 z-30 pointer-events-none">
               Click on another card to connect, or press Escape to cancel
             </div>
           ) : connections.length > 0 && (
-            <div className="absolute top-4 right-4 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 text-xs text-blue-700 z-10">
+            <div className="absolute top-4 right-4 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 text-xs text-blue-700 z-30 pointer-events-none">
               💡 Click on connection lines to remove them
             </div>
           )}
