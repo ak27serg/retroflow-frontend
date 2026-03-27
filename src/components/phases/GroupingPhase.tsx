@@ -17,33 +17,41 @@ interface ResponseCardProps {
 }
 
 function ResponseCard({ response, isLocked, isDropTarget }: ResponseCardProps) {
+  const isGood = response.category === 'WENT_WELL';
   return (
     <div
-      className={`p-3 rounded-lg border-2 shadow-sm w-48 relative transition-all duration-100 ${
-        response.category === 'WENT_WELL'
-          ? 'bg-green-50 border-green-300'
-          : 'bg-red-50 border-red-300'
-      } ${isDropTarget ? 'ring-2 ring-blue-500 ring-offset-2 shadow-blue-200' : ''} ${
-        isLocked ? 'opacity-50' : ''
+      className={`rounded-xl w-48 relative transition-all duration-150 select-none ${
+        isGood
+          ? 'bg-gradient-to-br from-emerald-50 to-green-100 border-l-4 border-l-emerald-400'
+          : 'bg-gradient-to-br from-rose-50 to-red-100 border-l-4 border-l-rose-400'
+      } ${isDropTarget ? 'ring-2 ring-blue-500 ring-offset-2' : ''} ${
+        isLocked ? 'opacity-40' : ''
       }`}
+      style={{
+        boxShadow: isDropTarget
+          ? '0 0 0 3px rgba(59,130,246,0.4), 0 4px 12px rgba(0,0,0,0.12)'
+          : '0 2px 8px rgba(0,0,0,0.08), 0 1px 3px rgba(0,0,0,0.06)',
+        border: isGood ? '1px solid #6ee7b7' : '1px solid #fca5a5',
+        borderLeft: isGood ? '4px solid #34d399' : '4px solid #f87171',
+      }}
     >
-      <p className="text-gray-900 text-sm font-medium leading-tight">{response.content}</p>
-      <div className="flex items-center gap-2 mt-2 text-xs text-gray-600">
-        <span>{response.participant?.avatarId}</span>
-        <span>{response.participant?.displayName}</span>
+      <div className="px-3 pt-3 pb-2">
+        <p className="text-gray-800 text-sm font-medium leading-snug">{response.content}</p>
       </div>
-      <div className="mt-1">
-        <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${
-          response.category === 'WENT_WELL'
-            ? 'bg-green-200 text-green-800'
-            : 'bg-red-200 text-red-800'
+      <div className={`px-3 pb-2 flex items-center justify-between ${isGood ? 'border-t border-emerald-200/60' : 'border-t border-rose-200/60'}`}>
+        <div className="flex items-center gap-1.5 mt-1.5 text-xs text-gray-500">
+          <span className="text-sm">{response.participant?.avatarId}</span>
+          <span className="truncate max-w-20">{response.participant?.displayName}</span>
+        </div>
+        <span className={`mt-1.5 inline-block px-1.5 py-0.5 rounded-full text-xs font-semibold ${
+          isGood ? 'bg-emerald-200/80 text-emerald-800' : 'bg-rose-200/80 text-rose-800'
         }`}>
-          {response.category === 'WENT_WELL' ? '😊' : '😕'}
+          {isGood ? '😊' : '😕'}
         </span>
       </div>
       {isLocked && (
-        <div className="absolute inset-0 rounded-lg flex items-center justify-center bg-gray-200/40">
-          <span className="text-xs text-gray-500 font-medium">🔒</span>
+        <div className="absolute inset-0 rounded-xl flex items-center justify-center bg-white/30 backdrop-blur-[1px]">
+          <span className="text-base">🔒</span>
         </div>
       )}
     </div>
@@ -597,9 +605,25 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
       ) : (
         <div
           ref={canvasRef}
-          className="bg-white rounded-xl border-2 border-gray-300 relative select-none"
-          style={{ minHeight: `${canvasMinHeight}px` }}
+          className="rounded-xl border border-gray-200 relative select-none overflow-hidden"
+          style={{
+            minHeight: `${canvasMinHeight}px`,
+            background: '#fafbfc',
+            backgroundImage: 'radial-gradient(circle, #d1d5db 1px, transparent 1px)',
+            backgroundSize: '28px 28px',
+            boxShadow: 'inset 0 1px 4px rgba(0,0,0,0.04), 0 1px 8px rgba(0,0,0,0.06)',
+          }}
         >
+          {/* Zone watermarks — behind everything */}
+          <div className="absolute inset-0 pointer-events-none flex" style={{ zIndex: 0 }}>
+            <div className="flex-1 flex items-center justify-center">
+              <span className="text-5xl font-black tracking-tight select-none" style={{ color: 'rgba(239,68,68,0.07)' }}>😕 Didn&apos;t go well</span>
+            </div>
+            <div className="flex-1 flex items-center justify-center">
+              <span className="text-5xl font-black tracking-tight select-none" style={{ color: 'rgba(16,185,129,0.07)' }}>😊 Went well</span>
+            </div>
+          </div>
+
           {/* Group envelopes — behind cards (z-index 0) */}
           {groupEnvelopes.map(env => (
             <div key={env.groupId}>
@@ -611,11 +635,12 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
                   top: env.minY,
                   width: env.width,
                   height: env.height,
-                  background: `${env.color}14`,
-                  border: `2px dashed ${env.color}`,
-                  borderRadius: 12,
+                  background: `${env.color}18`,
+                  border: `2px dashed ${env.color}99`,
+                  borderRadius: 16,
                   zIndex: 0,
                   pointerEvents: 'none',
+                  boxShadow: `inset 0 0 0 1px ${env.color}22, 0 2px 12px ${env.color}18`,
                 }}
               />
               {/* Group name badge — centered on the top border */}
@@ -652,6 +677,9 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
                   top: pos.y,
                   zIndex: isDraggingThis ? 20 : 1,
                   userSelect: 'none',
+                  transform: isDraggingThis ? 'scale(1.04) rotate(-1deg)' : 'scale(1)',
+                  filter: isDraggingThis ? 'drop-shadow(0 12px 24px rgba(0,0,0,0.22))' : undefined,
+                  transition: isDraggingThis ? 'none' : 'transform 150ms ease, filter 150ms ease',
                 }}
                 className={lockedCards.has(response.id) ? 'cursor-not-allowed' : 'cursor-grab active:cursor-grabbing'}
                 onMouseDown={e => handleMouseDown(e, response.id)}
