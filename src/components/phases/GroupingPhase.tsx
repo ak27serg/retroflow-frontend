@@ -148,19 +148,25 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
 
     const canvas = canvasRef.current;
     const canvasW = canvas?.offsetWidth ?? 760;
-    const colRightX = Math.floor(canvasW / 2) + 8;
 
     const positions = new Map<string, { x: number; y: number }>();
-    const wentWell = session.responses.filter(r => r.category === 'WENT_WELL');
-    const didntGoWell = session.responses.filter(r => r.category === 'DIDNT_GO_WELL');
+
+    // Seeded pseudo-random for reproducible layout (same each time page loads for unplaced cards)
+    let seed = 42;
+    const rand = () => { seed = (seed * 1664525 + 1013904223) & 0xffffffff; return (seed >>> 0) / 0xffffffff; };
 
     session.responses.forEach(r => {
       if (r.positionX !== 0 || r.positionY !== 0) {
         positions.set(r.id, { x: r.positionX, y: r.positionY });
       } else {
-        const isLeft = r.category === 'WENT_WELL';
-        const idx = isLeft ? wentWell.indexOf(r) : didntGoWell.indexOf(r);
-        positions.set(r.id, { x: isLeft ? 16 : colRightX, y: 16 + idx * 160 });
+        // Bad (DIDNT_GO_WELL) → left third; Good (WENT_WELL) → right two-thirds
+        const isGood = r.category === 'WENT_WELL';
+        const zoneStart = isGood ? Math.floor(canvasW * 0.35) : 16;
+        const zoneEnd   = isGood ? canvasW - CARD_W - 16 : Math.floor(canvasW * 0.6) - CARD_W;
+        const zoneW = Math.max(0, zoneEnd - zoneStart);
+        const x = Math.round(zoneStart + rand() * zoneW);
+        const y = Math.round(16 + rand() * Math.max(0, 600 - CARD_H - 80));
+        positions.set(r.id, { x, y });
       }
     });
 
