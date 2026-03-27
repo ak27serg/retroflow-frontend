@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Session, Participant, Response, Connection } from '@/lib/api';
+import { Session, Participant, Response } from '@/lib/api';
 import { socketService } from '@/lib/socket';
 
 interface GroupingPhaseProps {
@@ -12,37 +12,27 @@ interface GroupingPhaseProps {
 
 interface ResponseCardProps {
   response: Response;
-  onChainClick: (responseId: string) => void;
-  isSelected: boolean;
+  isLocked: boolean;
+  isDropTarget: boolean;
 }
 
-function ResponseCard({ response, onChainClick, isSelected }: ResponseCardProps) {
+function ResponseCard({ response, isLocked, isDropTarget }: ResponseCardProps) {
   return (
     <div
-      className={`response-card-visual p-3 rounded-lg border-2 shadow-sm transition-colors duration-200 w-48 relative ${
+      className={`p-3 rounded-lg border-2 shadow-sm w-48 relative transition-all duration-100 ${
         response.category === 'WENT_WELL'
           ? 'bg-green-50 border-green-300'
           : 'bg-red-50 border-red-300'
-      } ${isSelected ? 'ring-2 ring-green-500 ring-offset-2' : ''}`}
+      } ${isDropTarget ? 'ring-2 ring-blue-500 ring-offset-2 shadow-blue-200' : ''} ${
+        isLocked ? 'opacity-50' : ''
+      }`}
     >
-      {/* Chain icon */}
-      <button
-        onClick={(e) => {
-          e.stopPropagation();
-          onChainClick(response.id);
-        }}
-        className="absolute -top-2 -right-2 w-6 h-6 bg-white border-2 border-gray-300 rounded-full flex items-center justify-center hover:bg-gray-50 hover:border-gray-400 transition-colors shadow-sm"
-        title="Connect to another card"
-      >
-        <span className="text-xs">🔗</span>
-      </button>
-
       <p className="text-gray-900 text-sm font-medium leading-tight">{response.content}</p>
       <div className="flex items-center gap-2 mt-2 text-xs text-gray-600">
         <span>{response.participant?.avatarId}</span>
         <span>{response.participant?.displayName}</span>
       </div>
-      <div className="mt-1 flex justify-between items-center">
+      <div className="mt-1">
         <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${
           response.category === 'WENT_WELL'
             ? 'bg-green-200 text-green-800'
@@ -51,36 +41,68 @@ function ResponseCard({ response, onChainClick, isSelected }: ResponseCardProps)
           {response.category === 'WENT_WELL' ? '😊' : '😕'}
         </span>
       </div>
+      {isLocked && (
+        <div className="absolute inset-0 rounded-lg flex items-center justify-center bg-gray-200/40">
+          <span className="text-xs text-gray-500 font-medium">🔒</span>
+        </div>
+      )}
     </div>
   );
 }
 
 const CARD_W = 192; // w-48 = 12rem = 192px
-const CARD_H = 120; // approximate card height
+const CARD_H = 120;
 const EMIT_THROTTLE_MS = 50;
+
+function cardsOverlap(a: { x: number; y: number }, b: { x: number; y: number }): boolean {
+  return (
+    a.x < b.x + CARD_W &&
+    a.x + CARD_W > b.x &&
+    a.y < b.y + CARD_H &&
+    a.y + CARD_H > b.y
+  );
+}
 
 export default function GroupingPhase({ session, participant, isConnected }: GroupingPhaseProps) {
   const [responses, setResponses] = useState<Response[]>([]);
-  const [connections, setConnections] = useState<Connection[]>([]);
   const [cardPositions, setCardPositions] = useState<Map<string, { x: number; y: number }>>(new Map());
-  const [isDrawingConnection, setIsDrawingConnection] = useState(false);
-  const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
-  const [cursorPosition, setCursorPosition] = useState({ x: 0, y: 0 });
-  const [selectedCardPosition, setSelectedCardPosition] = useState({ x: 0, y: 0 });
+  // groups: groupId → cardIds[]
+  const [groups, setGroups] = useState<Map<string, string[]>>(new Map());
+  // groupColors: groupId → hex color string
+  const [groupColors, setGroupColors] = useState<Map<string, string>>(new Map());
+  // cards currently locked by other users
+  const [lockedCards, setLockedCards] = useState<Set<string>>(new Set());
+  // card being hovered over during a drag
+  const [dropTargetId, setDropTargetId] = useState<string | null>(null);
 
   const canvasRef = useRef<HTMLDivElement>(null);
-  const draggingIdRef = useRef<string | null>(null);
+
+  // Drag state refs (used inside document event handlers — never stale)
+  const draggingGroupRef = useRef<string[]>([]); // all cardIds moving together
+  const dragAnchorRef = useRef<string | null>(null); // the card the user clicked
   const dragOffsetRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const dragStartPositionsRef = useRef<Map<string, { x: number; y: number }>>(new Map());
   const lastEmitRef = useRef<number>(0);
-  // Keep a ref to cardPositions so mouseup closure always has current positions
+
+  // Mirrors of state for use inside stable document event handlers
   const cardPositionsRef = useRef<Map<string, { x: number; y: number }>>(new Map());
+  const lockedCardsRef = useRef<Set<string>>(new Set());
+  // cardId → groupId — rebuilt whenever `groups` changes
+  const cardGroupRef = useRef<Map<string, string>>(new Map());
 
-  // Sync ref whenever state changes
+  // Keep refs in sync with state
+  useEffect(() => { cardPositionsRef.current = cardPositions; }, [cardPositions]);
+  useEffect(() => { lockedCardsRef.current = lockedCards; }, [lockedCards]);
   useEffect(() => {
-    cardPositionsRef.current = cardPositions;
-  }, [cardPositions]);
+    const map = new Map<string, string>();
+    for (const [groupId, cardIds] of groups) {
+      cardIds.forEach(id => map.set(id, groupId));
+    }
+    cardGroupRef.current = map;
+  }, [groups]);
 
-  // Initialize positions from session data
+  // ── Initialise from session snapshot ──────────────────────────────────────
+
   useEffect(() => {
     if (!session.responses) return;
 
@@ -92,291 +114,389 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
     const wentWell = session.responses.filter(r => r.category === 'WENT_WELL');
     const didntGoWell = session.responses.filter(r => r.category === 'DIDNT_GO_WELL');
 
-    session.responses.forEach((r) => {
+    session.responses.forEach(r => {
       if (r.positionX !== 0 || r.positionY !== 0) {
-        // Use saved position from DB
         positions.set(r.id, { x: r.positionX, y: r.positionY });
       } else {
-        // Calculate default grid position
         const isLeft = r.category === 'WENT_WELL';
         const idx = isLeft ? wentWell.indexOf(r) : didntGoWell.indexOf(r);
-        positions.set(r.id, {
-          x: isLeft ? 16 : colRightX,
-          y: 16 + idx * 160,
-        });
+        positions.set(r.id, { x: isLeft ? 16 : colRightX, y: 16 + idx * 160 });
       }
     });
 
     setCardPositions(positions);
     setResponses(session.responses);
 
-    if (session.connections) {
-      setConnections(session.connections);
-    }
-  }, [session.responses, session.connections]);
+    // Derive group membership from responses' groupId field
+    const groupsMap = new Map<string, string[]>();
+    session.responses.forEach(r => {
+      if (r.groupId) {
+        const existing = groupsMap.get(r.groupId) ?? [];
+        groupsMap.set(r.groupId, [...existing, r.id]);
+      }
+    });
+    setGroups(groupsMap);
 
-  // Socket event listeners
+    // Group colors from session.groups
+    const colorsMap = new Map<string, string>();
+    session.groups?.forEach(g => colorsMap.set(g.id, g.color));
+    setGroupColors(colorsMap);
+  }, [session.responses, session.groups]);
+
+  // ── Socket event listeners ─────────────────────────────────────────────────
+
   useEffect(() => {
     const socket = socketService.getSocket();
     if (!socket) return;
-
-    const handleConnectionCreated = (connection: Connection) => {
-      setConnections(prev => [...prev, connection]);
-    };
-
-    const handleConnectionRemoved = (data: { connectionId: string }) => {
-      setConnections(prev => prev.filter(conn => conn.id !== data.connectionId));
-    };
 
     const handleCardMoved = (data: { responseId: string; x: number; y: number }) => {
       setCardPositions(prev => new Map(prev).set(data.responseId, { x: data.x, y: data.y }));
     };
 
-    socket.on('connection_created', handleConnectionCreated);
-    socket.on('connection_removed', handleConnectionRemoved);
+    const handleGroupMoved = (data: { positions: Record<string, { x: number; y: number }> }) => {
+      setCardPositions(prev => {
+        const next = new Map(prev);
+        for (const [id, pos] of Object.entries(data.positions)) {
+          next.set(id, pos);
+        }
+        return next;
+      });
+    };
+
+    const handleCardsLocked = (data: { cardIds: string[] }) => {
+      setLockedCards(prev => {
+        const next = new Set(prev);
+        data.cardIds.forEach(id => next.add(id));
+        return next;
+      });
+    };
+
+    const handleCardsUnlocked = (data: { cardIds: string[] }) => {
+      setLockedCards(prev => {
+        const next = new Set(prev);
+        data.cardIds.forEach(id => next.delete(id));
+        return next;
+      });
+    };
+
+    const handleCardsGrouped = (data: { groupId: string; cardIds: string[] }) => {
+      setGroups(prev => {
+        const next = new Map(prev);
+        // Remove these cardIds from any existing group entries
+        for (const [gId, ids] of next) {
+          const filtered = ids.filter(id => !data.cardIds.includes(id));
+          if (filtered.length === 0) {
+            next.delete(gId);
+          } else if (filtered.length !== ids.length) {
+            next.set(gId, filtered);
+          }
+        }
+        next.set(data.groupId, data.cardIds);
+        return next;
+      });
+      setGroupColors(prev => {
+        if (prev.has(data.groupId)) return prev;
+        const next = new Map(prev);
+        next.set(data.groupId, '#3B82F6');
+        return next;
+      });
+    };
+
+    const handleCardUngrouped = (data: { cardId: string; groupId: string }) => {
+      setGroups(prev => {
+        const next = new Map(prev);
+        const ids = next.get(data.groupId);
+        if (ids) {
+          const filtered = ids.filter(id => id !== data.cardId);
+          if (filtered.length <= 1) {
+            next.delete(data.groupId);
+          } else {
+            next.set(data.groupId, filtered);
+          }
+        }
+        return next;
+      });
+    };
+
+    const handleGroupDissolved = (data: { groupId: string }) => {
+      setGroups(prev => { const next = new Map(prev); next.delete(data.groupId); return next; });
+      setGroupColors(prev => { const next = new Map(prev); next.delete(data.groupId); return next; });
+    };
+
+    // lock_rejected: another user already holds the card — cancel our drag
+    const handleLockRejected = () => {
+      if (!dragAnchorRef.current) return;
+      // Restore positions to where they were when drag started
+      setCardPositions(prev => {
+        const next = new Map(prev);
+        for (const [id, pos] of dragStartPositionsRef.current) {
+          next.set(id, pos);
+        }
+        return next;
+      });
+      draggingGroupRef.current = [];
+      dragAnchorRef.current = null;
+      setDropTargetId(null);
+    };
+
     socket.on('card_moved', handleCardMoved);
+    socket.on('group_moved', handleGroupMoved);
+    socket.on('cards_locked', handleCardsLocked);
+    socket.on('cards_unlocked', handleCardsUnlocked);
+    socket.on('cards_grouped', handleCardsGrouped);
+    socket.on('card_ungrouped', handleCardUngrouped);
+    socket.on('group_dissolved', handleGroupDissolved);
+    socket.on('lock_rejected', handleLockRejected);
 
     return () => {
-      socket.off('connection_created', handleConnectionCreated);
-      socket.off('connection_removed', handleConnectionRemoved);
       socket.off('card_moved', handleCardMoved);
+      socket.off('group_moved', handleGroupMoved);
+      socket.off('cards_locked', handleCardsLocked);
+      socket.off('cards_unlocked', handleCardsUnlocked);
+      socket.off('cards_grouped', handleCardsGrouped);
+      socket.off('card_ungrouped', handleCardUngrouped);
+      socket.off('group_dissolved', handleGroupDissolved);
+      socket.off('lock_rejected', handleLockRejected);
     };
   }, []);
 
-  // Mouse tracking for connection drawing + card dragging
+  // ── Document-level mouse handlers ──────────────────────────────────────────
+
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
-      if (!canvasRef.current) return;
-      const rect = canvasRef.current.getBoundingClientRect();
+      const anchor = dragAnchorRef.current;
+      if (!anchor || !canvasRef.current) return;
 
-      // Always track cursor for SVG connection line preview
-      setCursorPosition({
-        x: e.clientX - rect.left,
-        y: e.clientY - rect.top,
+      const canvas = canvasRef.current;
+      const rect = canvas.getBoundingClientRect();
+
+      // New position for the anchor card
+      const rawX = e.clientX - rect.left - dragOffsetRef.current.x;
+      const rawY = e.clientY - rect.top - dragOffsetRef.current.y;
+      const newAnchorX = Math.max(0, Math.min(rawX, canvas.offsetWidth - CARD_W));
+      const newAnchorY = Math.max(0, Math.min(rawY, canvas.offsetHeight - CARD_H));
+
+      // Delta from drag-start position of the anchor
+      const startAnchor = dragStartPositionsRef.current.get(anchor) ?? { x: 0, y: 0 };
+      const dx = newAnchorX - startAnchor.x;
+      const dy = newAnchorY - startAnchor.y;
+
+      // Apply same delta to every card in the dragging group
+      setCardPositions(prev => {
+        const next = new Map(prev);
+        for (const id of draggingGroupRef.current) {
+          const start = dragStartPositionsRef.current.get(id) ?? { x: 0, y: 0 };
+          next.set(id, {
+            x: Math.max(0, Math.min(start.x + dx, canvas.offsetWidth - CARD_W)),
+            y: Math.max(0, Math.min(start.y + dy, canvas.offsetHeight - CARD_H)),
+          });
+        }
+        return next;
       });
 
-      // Handle card drag
-      if (draggingIdRef.current) {
-        const rawX = e.clientX - rect.left - dragOffsetRef.current.x;
-        const rawY = e.clientY - rect.top - dragOffsetRef.current.y;
-        const x = Math.max(0, Math.min(rawX, canvasRef.current.offsetWidth - CARD_W));
-        const y = Math.max(0, Math.min(rawY, canvasRef.current.offsetHeight - CARD_H));
+      // Detect drop target: first non-dragging card overlapping the anchor's new pos
+      const draggingSet = new Set(draggingGroupRef.current);
+      let newDropTarget: string | null = null;
+      for (const [otherId, otherPos] of cardPositionsRef.current) {
+        if (draggingSet.has(otherId)) continue;
+        if (cardsOverlap({ x: newAnchorX, y: newAnchorY }, otherPos)) {
+          newDropTarget = otherId;
+          break;
+        }
+      }
+      setDropTargetId(newDropTarget);
 
-        setCardPositions(prev => new Map(prev).set(draggingIdRef.current!, { x, y }));
+      // Throttled live broadcast
+      const now = Date.now();
+      if (now - lastEmitRef.current > EMIT_THROTTLE_MS) {
+        lastEmitRef.current = now;
+        const draggingIds = draggingGroupRef.current;
 
-        const now = Date.now();
-        if (now - lastEmitRef.current > EMIT_THROTTLE_MS) {
+        if (draggingIds.length === 1) {
           socketService.emit('drag_response', {
             sessionId: session.id,
-            responseId: draggingIdRef.current,
-            x,
-            y,
+            responseId: draggingIds[0],
+            x: newAnchorX,
+            y: newAnchorY,
             isDragging: true,
           });
-          lastEmitRef.current = now;
+        } else {
+          const positions: Record<string, { x: number; y: number }> = {};
+          for (const id of draggingIds) {
+            const start = dragStartPositionsRef.current.get(id) ?? { x: 0, y: 0 };
+            positions[id] = {
+              x: Math.max(0, Math.min(start.x + dx, canvas.offsetWidth - CARD_W)),
+              y: Math.max(0, Math.min(start.y + dy, canvas.offsetHeight - CARD_H)),
+            };
+          }
+          socketService.emit('drag_group', { sessionId: session.id, positions, isDragging: true });
         }
       }
     };
 
     const handleMouseUp = () => {
-      if (!draggingIdRef.current) return;
-      const id = draggingIdRef.current;
-      draggingIdRef.current = null;
-      const pos = cardPositionsRef.current.get(id);
-      if (pos) {
-        socketService.emit('drag_response', {
+      const anchor = dragAnchorRef.current;
+      if (!anchor) return;
+
+      const draggingIds = [...draggingGroupRef.current]; // copy before clearing
+      dragAnchorRef.current = null;
+      draggingGroupRef.current = [];
+      setDropTargetId(null);
+
+      // Release locks
+      socketService.emit('unlock_cards', { sessionId: session.id, cardIds: draggingIds });
+
+      // Re-compute drop target from final positions (don't rely on stale state)
+      const currentPositions = cardPositionsRef.current;
+      const draggingSet = new Set(draggingIds);
+      const anchorPos = currentPositions.get(anchor);
+      let dropTarget: string | null = null;
+      if (anchorPos) {
+        for (const [otherId, otherPos] of currentPositions) {
+          if (draggingSet.has(otherId)) continue;
+          if (cardsOverlap(anchorPos, otherPos)) {
+            dropTarget = otherId;
+            break;
+          }
+        }
+      }
+
+      // Collect final positions for persistence
+      const finalPositions: Record<string, { x: number; y: number }> = {};
+      draggingIds.forEach(id => {
+        const pos = currentPositions.get(id);
+        if (pos) finalPositions[id] = pos;
+      });
+
+      if (dropTarget) {
+        socketService.emit('group_cards', {
           sessionId: session.id,
-          responseId: id,
-          x: pos.x,
-          y: pos.y,
+          cardId1: anchor,
+          cardId2: dropTarget,
+        });
+      }
+
+      // Always persist final positions regardless of grouping
+      if (draggingIds.length === 1) {
+        const pos = finalPositions[anchor];
+        if (pos) {
+          socketService.emit('drag_response', {
+            sessionId: session.id,
+            responseId: anchor,
+            x: pos.x,
+            y: pos.y,
+            isDragging: false,
+          });
+        }
+      } else {
+        socketService.emit('drag_group', {
+          sessionId: session.id,
+          positions: finalPositions,
           isDragging: false,
         });
       }
     };
 
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isDrawingConnection) {
-        setIsDrawingConnection(false);
-        setSelectedCardId(null);
-      }
-    };
-
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseup', handleMouseUp);
-    if (isDrawingConnection) {
-      document.addEventListener('keydown', handleKeyDown);
-    }
-
     return () => {
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
-      document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [isDrawingConnection, session.id]);
+  }, [session.id]); // stable — all mutable values accessed via refs
+
+  // ── Card interaction handlers ──────────────────────────────────────────────
 
   const handleMouseDown = (e: React.MouseEvent, responseId: string) => {
-    // Only start drag on left-click; ignore if clicking the chain button
     if (e.button !== 0) return;
     e.preventDefault();
-    const pos = cardPositions.get(responseId) ?? { x: 0, y: 0 };
+
+    // Don't drag a card locked by another user
+    if (lockedCardsRef.current.has(responseId)) return;
+
+    // Collect the dragging group (the card's full group, or just the card itself)
+    const groupId = cardGroupRef.current.get(responseId);
+    const draggingIds = groupId ? (groups.get(groupId) ?? [responseId]) : [responseId];
+
+    // Don't drag if any other group member is locked
+    if (draggingIds.some(id => id !== responseId && lockedCardsRef.current.has(id))) return;
+
     const canvasRect = canvasRef.current?.getBoundingClientRect();
     if (!canvasRect) return;
-    draggingIdRef.current = responseId;
+
+    const anchorPos = cardPositionsRef.current.get(responseId) ?? { x: 0, y: 0 };
+
+    dragAnchorRef.current = responseId;
+    draggingGroupRef.current = draggingIds;
     dragOffsetRef.current = {
-      x: e.clientX - canvasRect.left - pos.x,
-      y: e.clientY - canvasRect.top - pos.y,
+      x: e.clientX - canvasRect.left - anchorPos.x,
+      y: e.clientY - canvasRect.top - anchorPos.y,
     };
-  };
 
-  const handleChainClick = (responseId: string) => {
-    if (isDrawingConnection && selectedCardId) {
-      if (selectedCardId !== responseId) {
-        createConnection(selectedCardId, responseId);
-      }
-      setIsDrawingConnection(false);
-      setSelectedCardId(null);
-    } else {
-      setSelectedCardId(responseId);
-      setIsDrawingConnection(true);
-
-      setTimeout(() => {
-        const containerElement = document.querySelector(`[data-response-id="${responseId}"]`) as HTMLElement;
-        if (containerElement && canvasRef.current) {
-          const visualCardElement = containerElement.querySelector('.response-card-visual') as HTMLElement;
-          if (visualCardElement) {
-            const canvasRect = canvasRef.current.getBoundingClientRect();
-            const cardRect = visualCardElement.getBoundingClientRect();
-            setSelectedCardPosition({
-              x: cardRect.left - canvasRect.left + cardRect.width,
-              y: cardRect.top - canvasRect.top + cardRect.height / 2,
-            });
-          }
-        }
-      }, 10);
-    }
-  };
-
-  const createConnection = (fromId: string, toId: string) => {
-    const exists = connections.some(conn =>
-      (conn.fromResponseId === fromId && conn.toResponseId === toId) ||
-      (conn.fromResponseId === toId && conn.toResponseId === fromId)
-    );
-    if (!exists) {
-      socketService.emit('create_connection', {
-        sessionId: session.id,
-        fromResponseId: fromId,
-        toResponseId: toId,
-      });
-    }
-  };
-
-  const removeConnection = (connectionId: string) => {
-    socketService.emit('remove_connection', {
-      sessionId: session.id,
-      connectionId,
+    // Snapshot start positions for delta-based group movement
+    const startPositions = new Map<string, { x: number; y: number }>();
+    draggingIds.forEach(id => {
+      startPositions.set(id, { ...(cardPositionsRef.current.get(id) ?? { x: 0, y: 0 }) });
     });
+    dragStartPositionsRef.current = startPositions;
+
+    socketService.emit('lock_cards', { sessionId: session.id, cardIds: draggingIds });
   };
 
-  // Get card anchor position for SVG connection lines (right-edge center)
-  const getCardPosition = (responseId: string) => {
-    const containerElement = document.querySelector(`[data-response-id="${responseId}"]`) as HTMLElement;
-    if (containerElement && canvasRef.current) {
-      const visualCardElement = containerElement.querySelector('.response-card-visual') as HTMLElement;
-      if (visualCardElement) {
-        const canvasRect = canvasRef.current.getBoundingClientRect();
-        const cardRect = visualCardElement.getBoundingClientRect();
-        return {
-          x: cardRect.left - canvasRect.left + cardRect.width,
-          y: cardRect.top - canvasRect.top + cardRect.height / 2,
-        };
-      }
+  const handleDoubleClick = (e: React.MouseEvent, responseId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const groupId = cardGroupRef.current.get(responseId);
+    if (!groupId) return;
+
+    // Cancel any in-progress drag and restore start positions
+    if (dragAnchorRef.current) {
+      const draggingIds = [...draggingGroupRef.current];
+      socketService.emit('unlock_cards', { sessionId: session.id, cardIds: draggingIds });
+      setCardPositions(prev => {
+        const next = new Map(prev);
+        for (const [id, pos] of dragStartPositionsRef.current) next.set(id, pos);
+        return next;
+      });
+      dragAnchorRef.current = null;
+      draggingGroupRef.current = [];
+      setDropTargetId(null);
     }
-    return { x: 0, y: 0 };
+
+    socketService.emit('ungroup_card', { sessionId: session.id, cardId: responseId });
   };
 
-  const ConnectionLines = () => (
-    <svg
-      className="absolute inset-0"
-      style={{ zIndex: 10, pointerEvents: 'none' }}
-      width="100%"
-      height="100%"
-    >
-      <rect width="100%" height="100%" fill="transparent" style={{ pointerEvents: 'none' }} />
+  // ── Derived render data ────────────────────────────────────────────────────
 
-      {connections.map((connection) => {
-        const fromPos = getCardPosition(connection.fromResponseId);
-        const toPos = getCardPosition(connection.toResponseId);
-        const isSameColumn = Math.abs(fromPos.x - toPos.x) < 100;
-        let pathData: string;
-
-        if (isSameColumn) {
-          const controlOffset = 225;
-          const midY = (fromPos.y + toPos.y) / 2;
-          const controlX = Math.max(fromPos.x, toPos.x) + controlOffset;
-          pathData = `M ${fromPos.x} ${fromPos.y} Q ${controlX} ${midY} ${toPos.x} ${toPos.y}`;
-        } else {
-          pathData = `M ${fromPos.x} ${fromPos.y} L ${toPos.x} ${toPos.y}`;
-        }
-
-        return (
-          <g key={connection.id} style={{ pointerEvents: 'all' }}>
-            <path
-              d={pathData}
-              stroke="transparent"
-              strokeWidth="16"
-              fill="none"
-              className="cursor-pointer"
-              style={{ pointerEvents: 'stroke' }}
-              onClick={(e) => {
-                e.stopPropagation();
-                removeConnection(connection.id);
-              }}
-              onMouseEnter={(e) => {
-                const visiblePath = e.currentTarget.nextElementSibling as SVGPathElement;
-                if (visiblePath) { visiblePath.style.stroke = '#ef4444'; visiblePath.style.strokeWidth = '4'; }
-              }}
-              onMouseLeave={(e) => {
-                const visiblePath = e.currentTarget.nextElementSibling as SVGPathElement;
-                if (visiblePath) { visiblePath.style.stroke = '#10b981'; visiblePath.style.strokeWidth = '3'; }
-              }}
-            />
-            <path
-              d={pathData}
-              stroke="#10b981"
-              strokeWidth="3"
-              fill="none"
-              className="transition-all duration-200"
-              style={{ pointerEvents: 'none' }}
-            />
-          </g>
-        );
-      })}
-
-      {isDrawingConnection && selectedCardId && (
-        <line
-          x1={selectedCardPosition.x}
-          y1={selectedCardPosition.y}
-          x2={cursorPosition.x}
-          y2={cursorPosition.y}
-          stroke="#10b981"
-          strokeWidth="3"
-          strokeDasharray="5,5"
-          style={{ pointerEvents: 'none' }}
-        />
-      )}
-    </svg>
-  );
+  // Group envelopes: bounding boxes rendered behind the cards
+  const groupEnvelopes = Array.from(groups.entries()).flatMap(([groupId, cardIds]) => {
+    const positions = cardIds.map(id => cardPositions.get(id)).filter(
+      (p): p is { x: number; y: number } => p !== undefined
+    );
+    if (positions.length < 2) return [];
+    const minX = Math.min(...positions.map(p => p.x)) - 12;
+    const minY = Math.min(...positions.map(p => p.y)) - 12;
+    const maxX = Math.max(...positions.map(p => p.x + CARD_W)) + 12;
+    const maxY = Math.max(...positions.map(p => p.y + CARD_H)) + 12;
+    const color = groupColors.get(groupId) ?? '#3B82F6';
+    return [{ groupId, minX, minY, width: maxX - minX, height: maxY - minY, color }];
+  });
 
   const maxCardY = cardPositions.size > 0
     ? Math.max(...Array.from(cardPositions.values()).map(p => p.y))
     : 0;
   const canvasMinHeight = Math.max(600, maxCardY + CARD_H + 80);
 
+  // ── Render ─────────────────────────────────────────────────────────────────
+
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="text-center mb-8">
         <h1 className="text-4xl font-bold text-gray-900 mb-2">Grouping Phase</h1>
-        <p className="text-gray-600">Drag cards to group related feedback. Click 🔗 to connect cards.</p>
+        <p className="text-gray-600">
+          Drop cards onto each other to group them. Double-click a grouped card to detach it.
+        </p>
 
         {participant.isHost && (
           <div className="flex gap-3 justify-center mt-4">
@@ -402,9 +522,7 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
         <div className="text-center py-12">
           <div className="text-6xl mb-4">📝</div>
           <h3 className="text-xl font-semibold text-gray-900 mb-2">No Responses Found</h3>
-          <p className="text-gray-600 mb-6">
-            Make sure you added responses in the Input phase first.
-          </p>
+          <p className="text-gray-600 mb-6">Make sure you added responses in the Input phase first.</p>
           <button
             onClick={() => socketService.emit('change_phase', { sessionId: session.id, phase: 'INPUT' })}
             className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 font-semibold"
@@ -418,11 +536,29 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
           className="bg-white rounded-xl border-2 border-gray-300 relative select-none"
           style={{ minHeight: `${canvasMinHeight}px` }}
         >
-          <ConnectionLines />
+          {/* Group envelopes — behind cards (z-index 0) */}
+          {groupEnvelopes.map(env => (
+            <div
+              key={env.groupId}
+              style={{
+                position: 'absolute',
+                left: env.minX,
+                top: env.minY,
+                width: env.width,
+                height: env.height,
+                background: `${env.color}14`,
+                border: `2px dashed ${env.color}`,
+                borderRadius: 12,
+                zIndex: 0,
+                pointerEvents: 'none',
+              }}
+            />
+          ))}
 
-          {responses.map((response) => {
+          {/* Cards */}
+          {responses.map(response => {
             const pos = cardPositions.get(response.id) ?? { x: 0, y: 0 };
-            const isDraggingThis = draggingIdRef.current === response.id;
+            const isDraggingThis = draggingGroupRef.current.includes(response.id);
             return (
               <div
                 key={response.id}
@@ -434,27 +570,23 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
                   zIndex: isDraggingThis ? 20 : 1,
                   userSelect: 'none',
                 }}
-                className="cursor-grab active:cursor-grabbing"
-                onMouseDown={(e) => handleMouseDown(e, response.id)}
+                className={lockedCards.has(response.id) ? 'cursor-not-allowed' : 'cursor-grab active:cursor-grabbing'}
+                onMouseDown={e => handleMouseDown(e, response.id)}
+                onDoubleClick={e => handleDoubleClick(e, response.id)}
               >
                 <ResponseCard
                   response={response}
-                  onChainClick={handleChainClick}
-                  isSelected={selectedCardId === response.id}
+                  isLocked={lockedCards.has(response.id)}
+                  isDropTarget={dropTargetId === response.id}
                 />
               </div>
             );
           })}
 
-          {isDrawingConnection ? (
-            <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-green-100 border border-green-300 rounded-lg px-4 py-2 text-sm text-green-800 z-30 pointer-events-none">
-              Click on another card to connect, or press Escape to cancel
-            </div>
-          ) : connections.length > 0 && (
-            <div className="absolute top-4 right-4 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 text-xs text-blue-700 z-30 pointer-events-none">
-              💡 Click on connection lines to remove them
-            </div>
-          )}
+          {/* Hint */}
+          <div className="absolute top-4 right-4 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 text-xs text-blue-700 z-30 pointer-events-none">
+            💡 Drop cards onto each other to group · Double-click to ungroup
+          </div>
         </div>
       )}
     </div>
