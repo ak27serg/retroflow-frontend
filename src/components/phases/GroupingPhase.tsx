@@ -54,6 +54,44 @@ const CARD_W = 192; // w-48 = 12rem = 192px
 const CARD_H = 120;
 const EMIT_THROTTLE_MS = 50;
 
+interface GroupLabelInputProps {
+  groupId: string;
+  sessionId: string;
+  color: string;
+  label: string;
+}
+
+function GroupLabelInput({ groupId, sessionId, color, label }: GroupLabelInputProps) {
+  const [localLabel, setLocalLabel] = useState(label);
+  const [focused, setFocused] = useState(false);
+
+  // Sync external label changes when not focused (another user renamed)
+  useEffect(() => {
+    if (!focused) setLocalLabel(label);
+  }, [label, focused]);
+
+  const save = () => {
+    setFocused(false);
+    socketService.emit('rename_group', { sessionId, groupId, label: localLabel });
+  };
+
+  return (
+    <input
+      type="text"
+      value={localLabel}
+      placeholder="Group name…"
+      maxLength={100}
+      onChange={e => setLocalLabel(e.target.value)}
+      onFocus={() => setFocused(true)}
+      onBlur={save}
+      onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+      onMouseDown={e => e.stopPropagation()}
+      style={{ borderColor: color, color }}
+      className="text-xs font-semibold px-2 py-0.5 rounded-full border-2 bg-white shadow-sm w-36 text-center focus:outline-none focus:shadow-md placeholder-gray-300 cursor-text"
+    />
+  );
+}
+
 function cardsOverlap(a: { x: number; y: number }, b: { x: number; y: number }): boolean {
   return (
     a.x < b.x + CARD_W &&
@@ -70,6 +108,8 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
   const [groups, setGroups] = useState<Map<string, string[]>>(new Map());
   // groupColors: groupId → hex color string
   const [groupColors, setGroupColors] = useState<Map<string, string>>(new Map());
+  // groupLabels: groupId → label string
+  const [groupLabels, setGroupLabels] = useState<Map<string, string>>(new Map());
   // cards currently locked by other users
   const [lockedCards, setLockedCards] = useState<Set<string>>(new Set());
   // card being hovered over during a drag
@@ -137,10 +177,15 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
     });
     setGroups(groupsMap);
 
-    // Group colors from session.groups
+    // Group colors and labels from session.groups
     const colorsMap = new Map<string, string>();
-    session.groups?.forEach(g => colorsMap.set(g.id, g.color));
+    const labelsMap = new Map<string, string>();
+    session.groups?.forEach(g => {
+      colorsMap.set(g.id, g.color);
+      if (g.label) labelsMap.set(g.id, g.label);
+    });
     setGroupColors(colorsMap);
+    setGroupLabels(labelsMap);
   }, [session.responses, session.groups]);
 
   // ── Socket event listeners ─────────────────────────────────────────────────
@@ -221,6 +266,16 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
     const handleGroupDissolved = (data: { groupId: string }) => {
       setGroups(prev => { const next = new Map(prev); next.delete(data.groupId); return next; });
       setGroupColors(prev => { const next = new Map(prev); next.delete(data.groupId); return next; });
+      setGroupLabels(prev => { const next = new Map(prev); next.delete(data.groupId); return next; });
+    };
+
+    const handleGroupRenamed = (data: { groupId: string; label: string | null }) => {
+      setGroupLabels(prev => {
+        const next = new Map(prev);
+        if (data.label) next.set(data.groupId, data.label);
+        else next.delete(data.groupId);
+        return next;
+      });
     };
 
     // lock_rejected: another user already holds the card — cancel our drag
@@ -246,6 +301,7 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
     socket.on('cards_grouped', handleCardsGrouped);
     socket.on('card_ungrouped', handleCardUngrouped);
     socket.on('group_dissolved', handleGroupDissolved);
+    socket.on('group_renamed', handleGroupRenamed);
     socket.on('lock_rejected', handleLockRejected);
 
     return () => {
@@ -256,6 +312,7 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
       socket.off('cards_grouped', handleCardsGrouped);
       socket.off('card_ungrouped', handleCardUngrouped);
       socket.off('group_dissolved', handleGroupDissolved);
+      socket.off('group_renamed', handleGroupRenamed);
       socket.off('lock_rejected', handleLockRejected);
     };
   }, []);
@@ -480,7 +537,8 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
     const maxX = Math.max(...positions.map(p => p.x + CARD_W)) + 12;
     const maxY = Math.max(...positions.map(p => p.y + CARD_H)) + 12;
     const color = groupColors.get(groupId) ?? '#3B82F6';
-    return [{ groupId, minX, minY, width: maxX - minX, height: maxY - minY, color }];
+    const label = groupLabels.get(groupId) ?? '';
+    return [{ groupId, minX, minY, width: maxX - minX, height: maxY - minY, color, label }];
   });
 
   const maxCardY = cardPositions.size > 0
@@ -538,21 +596,40 @@ export default function GroupingPhase({ session, participant, isConnected }: Gro
         >
           {/* Group envelopes — behind cards (z-index 0) */}
           {groupEnvelopes.map(env => (
-            <div
-              key={env.groupId}
-              style={{
-                position: 'absolute',
-                left: env.minX,
-                top: env.minY,
-                width: env.width,
-                height: env.height,
-                background: `${env.color}14`,
-                border: `2px dashed ${env.color}`,
-                borderRadius: 12,
-                zIndex: 0,
-                pointerEvents: 'none',
-              }}
-            />
+            <div key={env.groupId}>
+              {/* Background envelope */}
+              <div
+                style={{
+                  position: 'absolute',
+                  left: env.minX,
+                  top: env.minY,
+                  width: env.width,
+                  height: env.height,
+                  background: `${env.color}14`,
+                  border: `2px dashed ${env.color}`,
+                  borderRadius: 12,
+                  zIndex: 0,
+                  pointerEvents: 'none',
+                }}
+              />
+              {/* Group name badge — centered on the top border */}
+              <div
+                style={{
+                  position: 'absolute',
+                  left: env.minX + env.width / 2,
+                  top: Math.max(4, env.minY - 12),
+                  transform: 'translateX(-50%)',
+                  zIndex: 10,
+                }}
+              >
+                <GroupLabelInput
+                  groupId={env.groupId}
+                  sessionId={session.id}
+                  color={env.color}
+                  label={env.label}
+                />
+              </div>
+            </div>
           ))}
 
           {/* Cards */}
